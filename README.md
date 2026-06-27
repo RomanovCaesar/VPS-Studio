@@ -1,3 +1,5 @@
+[中文](/README.md) | [English](/README_en-US.md) 
+
 <h1 align="center">VPS Studio</h1>
 
 <div align="center">
