@@ -1,4 +1,4 @@
-[English](/README_en-US.md) | [中文](/README.md)
+[English](/README.md) | [中文](/README_zh-CN.md)
 
 <h1 align="center">VPS Studio</h1>
 
