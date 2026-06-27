@@ -1,9 +1,9 @@
-[中文](/README.md) | [English](/README_en-US.md) 
+ [English](/README_en-US.md) | [中文](/README.md)
 
 <h1 align="center">VPS Studio</h1>
 
 <div align="center">
-  <strong>一款现代化、高性能、纯本地的跨平台服务器管理与 SSH 客户端。</strong>
+  <strong>A modern, high-performance, fully local cross-platform server management & SSH client.</strong>
 </div>
 <br>
 
@@ -16,49 +16,49 @@
 
 <br>
 
-## 📢 最新更新 (What's New)
+## 📢 What's New
 
-*当前为 `v0.2.0` 初版发布，尚未有历史更新。以后新版本的更新日志、修复细节及新增功能将记录于此。*
+*This is the initial `v0.2.0` release. There are no historical updates yet. Future release notes, bug fixes, and new features will be documented here.*
 
 <br>
 
-## 🚀 为什么选择 VPS Studio？ (核心优势)
+## 🚀 Why VPS Studio? (Core Features)
 
-传统的 SSH 工具（如 Xshell、Putty）往往界面陈旧，而一些现代工具（如 Termius）又依赖于云端同步，对于重视隐私的极客和开发者而言，安全性始终是个顾虑。
+Traditional SSH clients (like Xshell, Putty) often feature outdated UI, while modern alternatives (like Termius) rely heavily on cloud synchronization, which always poses security concerns for privacy-focused geeks and developers.
 
-**VPS Studio** 应运而生，它旨在提供**极致现代化的用户体验**，同时**完全由你掌控自己的数据**：
+**VPS Studio** was born to solve this. It aims to provide an **ultimately modern user experience** while ensuring that **you completely own your data**:
 
-- 🔒 **纯本地数据存储**：无需注册账号，不依赖任何云服务，你的所有服务器配置、SSH 密钥（Key）和密码都通过 WebView2 安全地持久化在你自己的电脑本地硬盘中，真正的隐私安全。
-- ⚡ **极致轻量且高性能**：由 **Rust** 结合 Tauri 构建后端，内存占用低，启动如丝般顺滑。
-- 🔑 **全能密钥与身份管理**：内置强大的本地密钥库，支持一键生成现代化的 `Ed25519` 或 `RSA`、`ECDSA` 密钥，并且支持将一个身份（包含账户和凭据）快捷分配给多个主机，管理几十台服务器也能井井有条。
-- 💡 **一键代码片段 (Snippets)**：内置代码片段库，只需点击一下即可向目标服务器批量发送复杂指令，告别重复的敲键盘。
-- 🇨🇳 **原生沉浸式中文支持**：为国内开发者深度定制，全界面精校汉化，消除语言壁垒。
-- 💻 **内置本地终端集成**：无需切换应用，在主界面中一键呼出本地 PowerShell，直接进行本地环境操作。
+- 🔒 **Fully Local Data Storage**: No account registration needed, no reliance on cloud services. All your server configurations, SSH keys, and passwords are securely persisted locally on your computer's hard drive via WebView2, guaranteeing true privacy and security.
+- ⚡ **Extremely Lightweight & High-Performance**: Built with **Rust** and Tauri on the backend, it consumes very little memory and launches buttery smooth.
+- 🔑 **Powerful Keychain & Identity Management**: Features a robust local keychain supporting one-click generation of modern `Ed25519`, `RSA`, or `ECDSA` keys. Easily bind an "Identity" (credentials + username) and assign it to multiple hosts, keeping dozens of servers perfectly organized.
+- 💡 **One-Click Snippets**: Features a built-in Snippets library. Send complex commands in batches to your target server with just one click, saying goodbye to repetitive typing.
+- 🇨🇳 **Native Immersive Localization**: Deeply customized for local developers with full interface translations, eliminating language barriers.
+- 💻 **Integrated Local Terminal**: No need to switch apps. Bring up the local PowerShell right from the main interface with a single click to manage your local environment effortlessly.
 
-## 📦 安装说明
+## 📦 Installation
 
-VPS Studio 提供了极其灵活的使用方式，满足不同用户群体的使用习惯。你可以在 Releases 页面中找到以下两个版本：
+VPS Studio offers highly flexible ways to use the app to meet different user preferences. You can find the following two versions in the Releases page:
 
-### 1. 便携版 (Portable)
-下载 `vps-studio.exe`。
-**使用方法**：直接双击运行！完全绿色免安装。无需配置环境，你可以把它放在桌面上，甚至放进 U 盘里随身携带。只要是在现代的 Windows 10/11 系统（已内置 Microsoft Edge WebView2）下均可直接启动。
+### 1. Portable Version
+Download `vps-studio.exe`.
+**How to use**: Just double-click to run! Completely green and installation-free. No environment setup needed—you can place it on your desktop or carry it on a USB drive. It runs instantly on any modern Windows 10/11 machine (with Microsoft Edge WebView2 built-in).
 
-### 2. 传统安装包版 (Installer)
-下载 `VPSStudioSetup.exe`。
-**使用方法**：双击运行安装向导，它会自动在系统控制面板中注册，并能在桌面上生成快捷方式。如果你需要卸载，只需在控制面板中点击卸载，或者运行其自带的卸载程序（`unins000.exe`）即可干净无痕地移除。
+### 2. Standard Installer
+Download `VPSStudioSetup.exe`.
+**How to use**: Double-click to run the setup wizard. It will automatically register in the Windows Control Panel and create desktop shortcuts. To uninstall, simply use the Control Panel or run the included uninstaller (`unins000.exe`) for a completely clean removal.
 
-## 📖 快速上手指南
+## 📖 Quick Start Guide
 
-1. **管理你的凭据**：点击侧边栏进入**保管库 (Keychain)**，你可以直接新建并生成一个 `Ed25519` 密钥，或者通过拖放文件的方式导入你现有的私钥文件。
-2. **定义身份 (Identity)**：将你在保管库中的密钥或密码与登录用户名（例如 `root`）绑定成一个“身份”。
-3. **添加主机 (Host)**：在主机列表页点击新建，输入你的服务器 IP，并在下拉菜单中直接选中你刚刚创建的“身份”。
-4. **一键连接**：双击你刚刚添加的服务器卡片，或者右键选择连接，即可瞬间唤出终端进入管理状态！
+1. **Manage Your Credentials**: Click the sidebar to enter the **Keychain**. You can directly generate a new `Ed25519` key or import your existing private key file via drag-and-drop.
+2. **Define an Identity**: Bind your key or password from the keychain with a login username (e.g., `root`) to create an "Identity".
+3. **Add a Host**: Click "New" on the Hosts list page, enter your server IP, and select the newly created "Identity" directly from the dropdown menu.
+4. **One-Click Connect**: Double-click the server card you just added (or right-click and choose Connect) to instantly bring up the terminal and enter management mode!
 
-## 👨‍💻 技术栈
+## 👨‍💻 Tech Stack
 
 - **Frontend**: HTML5, Vanilla JavaScript, CSS3
 - **Backend / Core**: Rust, Tauri
-- **Terminal Emulator**: xterm.js (集成)
+- **Terminal Emulator**: xterm.js (Integrated)
 - **Installer Engine**: Inno Setup
 
 ---
