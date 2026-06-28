@@ -1,6 +1,9 @@
 [English](/README.md) | [中文](/README_zh-CN.md)
 
-<h1 align="center">VPS Studio</h1>
+<h1 align="center">
+  <img src="logo.png" alt="VPS Studio" width="200">
+  <br>VPS Studio<br>
+</h1>
 
 <div align="center">
   <strong>一款现代化、高性能、纯本地的跨平台服务器管理与 SSH 客户端。</strong>
@@ -40,11 +43,11 @@
 VPS Studio 提供了极其灵活的使用方式，满足不同用户群体的使用习惯。你可以在 Releases 页面中找到以下两个版本：
 
 ### 1. 便携版 (Portable)
-下载 `vps-studio.exe`。
-**使用方法**：直接双击运行！完全绿色免安装。无需配置环境，你可以把它放在桌面上，甚至放进 U 盘里随身携带。只要是在现代的 Windows 10/11 系统（已内置 Microsoft Edge WebView2）下均可直接启动。
+下载 `VPS-Studio-version-Portable.zip`。
+**使用方法**：直接解压此压缩包内容然后双击运行！完全绿色免安装。无需配置环境，你可以把它放在桌面上，甚至放进 U 盘里随身携带。只要是在现代的 Windows 10/11 系统（已内置 Microsoft Edge WebView2）下均可直接启动。
 
 ### 2. 传统安装包版 (Installer)
-下载 `VPSStudioSetup.exe`。
+下载 `VPS-Studio-version-Setup.exe`。
 **使用方法**：双击运行安装向导，它会自动在系统控制面板中注册，并能在桌面上生成快捷方式。如果你需要卸载，只需在控制面板中点击卸载，或者运行其自带的卸载程序（`unins000.exe`）即可干净无痕地移除。
 
 ## 📖 快速上手指南
