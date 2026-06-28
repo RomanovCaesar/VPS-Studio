@@ -1,6 +1,9 @@
 [English](/README.md) | [中文](/README_zh-CN.md)
 
-<h1 align="center">VPS Studio</h1>
+<h1 align="center">
+  <img src="logo.png" alt="VPS Studio" width="200">
+  <br>VPS Studio<br>
+</h1>
 
 <div align="center">
   <strong>A modern, high-performance, fully local cross-platform server management & SSH client.</strong>
@@ -40,11 +43,11 @@ Traditional SSH clients (like Xshell, Putty) often feature outdated UI, while mo
 VPS Studio offers highly flexible ways to use the app to meet different user preferences. You can find the following two versions in the Releases page:
 
 ### 1. Portable Version
-Download `vps-studio.exe`.
-**How to use**: Just double-click to run! Completely green and installation-free. No environment setup needed—you can place it on your desktop or carry it on a USB drive. It runs instantly on any modern Windows 10/11 machine (with Microsoft Edge WebView2 built-in).
+Download `VPS-Studio-version-Portable.zip`.
+**How to use**: Just extract its content and double-click to run! Completely green and installation-free. No environment setup needed—you can place it on your desktop or carry it on a USB drive. It runs instantly on any modern Windows 10/11 machine (with Microsoft Edge WebView2 built-in).
 
 ### 2. Standard Installer
-Download `VPSStudioSetup.exe`.
+Download `VPS-Studio-version-Setup.exe`.
 **How to use**: Double-click to run the setup wizard. It will automatically register in the Windows Control Panel and create desktop shortcuts. To uninstall, simply use the Control Panel or run the included uninstaller (`unins000.exe`) for a completely clean removal.
 
 ## 📖 Quick Start Guide
