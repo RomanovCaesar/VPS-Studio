@@ -222,7 +222,8 @@ const i18n = {
     "Password": "密码",
     "Key passphrase": "密钥密码短语",
     "Legacy devices": "旧设备",
-    "Local PowerShell opened at ": "本地 PowerShell 打开于 "
+    "Local PowerShell opened at ": "本地 PowerShell 打开于 ",
+    "More options": "更多选项"
   }
 };
 
@@ -3132,7 +3133,7 @@ function renderHostsPage() {
     <div class="toolstrip">
       <div class="split">
         <button class="btn primary" data-action="new-host">${t("New host")}</button>
-        <button class="btn square" data-action="toggle-host-menu">${state.hostMenuOpen ? "^" : "v"}</button>
+        <button class="btn primary square" data-action="toggle-host-menu" title="${t("More options")}">${chevronDownIcon(state.hostMenuOpen)}</button>
         ${state.hostMenuOpen ? renderHostMenu() : ""}
       </div>
       <button class="btn ghost strong" data-action="local-terminal">${t("Terminal")}</button>
@@ -3296,20 +3297,32 @@ function pencilIcon() {
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`;
 }
 
+function chevronDownIcon(isOpen = false) {
+  return `<svg class="chevron-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px; transition: transform 0.2s ease; transform: ${isOpen ? 'rotate(180deg)' : 'none'};"><polyline points="6 9 12 15 18 9"/></svg>`;
+}
+
 function sortIcon() {
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="8" y2="18"/></svg>`;
 }
 
 function sortAzIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="m3 8 4-4 4 4M7 4v16"/><path d="M15 4h5l-5 6h5M15 20v-6h4a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-4z"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="4" x2="5" y2="20"/><polyline points="2.5 16.5 5 19.5 7.5 16.5"/><path d="M12.5 10.5 15.5 4.5l3 6M13.3 8.8h4.4"/><path d="M13 15h5.5l-5.5 5h5.5"/></svg>`;
 }
 
 function sortZaIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="m3 8 4-4 4 4M7 4v16"/><path d="M15 10h5l-5-6h5M15 14v6h4a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-4z"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="4" x2="5" y2="20"/><polyline points="2.5 16.5 5 19.5 7.5 16.5"/><path d="M13 4.5h5.5l-5.5 5h5.5"/><path d="M12.5 20.5 15.5 14.5l3 6M13.3 18.8h4.4"/></svg>`;
 }
 
 function calendarIcon() {
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+}
+
+function calendarDescIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="12" y1="12" x2="12" y2="17"/><polyline points="9.5 14.5 12 17 14.5 14.5"/></svg>`;
+}
+
+function calendarAscIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="12" y1="17" x2="12" y2="12"/><polyline points="9.5 14.5 12 12 14.5 14.5"/></svg>`;
 }
 
 function checkIcon() {
@@ -3427,7 +3440,7 @@ function renderKeychainPage() {
     <div class="toolstrip first">
       <div class="split">
         <button class="btn primary" data-action="new-key">${t("New key")}</button>
-        <button class="btn square" data-action="toggle-key-menu">${state.keyMenuOpen ? "^" : "v"}</button>
+        <button class="btn primary square" data-action="toggle-key-menu" title="${t("More options")}">${chevronDownIcon(state.keyMenuOpen)}</button>
         ${state.keyMenuOpen ? renderKeyMenu() : ""}
       </div>
       ${renderToolstripRight(true)}
@@ -3465,8 +3478,8 @@ function renderSortMenu() {
   const modes = [
     { id: "a-z", label: "A-z", icon: sortAzIcon() },
     { id: "z-a", label: "Z-a", icon: sortZaIcon() },
-    { id: "newest", label: "Newest to oldest", icon: calendarIcon() },
-    { id: "oldest", label: "Oldest to newest", icon: calendarIcon() },
+    { id: "newest", label: "Newest to oldest", icon: calendarDescIcon() },
+    { id: "oldest", label: "Oldest to newest", icon: calendarAscIcon() },
   ];
   return `
     <div class="dropdown-menu right" style="min-width: 180px; left: auto; right: 0;">
