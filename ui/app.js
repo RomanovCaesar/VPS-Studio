@@ -1611,7 +1611,8 @@ async function openLocalPowershell() {
   state.activeShellId = sessionId;
   state.sessionKind = "local";
   state.shellHealthy = false;
-  state.status = "Opening local PowerShell...";
+  const termName = isMacOS() ? "Terminal (zsh)" : "PowerShell";
+  state.status = `Opening local ${termName}...`;
   state.view = "localTerminal";
   state.commandInput = "";
   state.connection = null;
@@ -1621,7 +1622,7 @@ async function openLocalPowershell() {
   render({ terminalBottom: true, focusTerminal: true });
   resetLocalLine(true);
   terminalReset(terminalColumns(), terminalRows());
-  appendTerminalOutput("[vps-studio] opening local PowerShell...\r\n");
+  appendTerminalOutput(`[vps-studio] opening local ${termName}...\r\n`);
 
   try {
     const summary = await call("start_local_shell", {
@@ -1632,16 +1633,16 @@ async function openLocalPowershell() {
     state.shellHealthy = true;
     startShellPolling();
     await pollShellOutput();
-    pushLog("Terminal", "Opened local PowerShell.");
-    setStatus(t("Local PowerShell opened at ") + summary.connectedAt, {
+    pushLog("Terminal", `Opened ${summary.banner || termName}.`);
+    setStatus(`${summary.banner || termName} ${t("connected at")} ${summary.connectedAt}`, {
       terminalBottom: true,
       focusTerminal: true,
     });
   } catch (error) {
     state.shellHealthy = false;
-    appendTerminalOutput(`[vps-studio] local PowerShell failed: ${error}\r\n`);
-    pushLog("Terminal", `Open local PowerShell failed: ${error}`);
-    setStatus(`Open local PowerShell failed: ${error}`, { focusTerminal: true });
+    appendTerminalOutput(`[vps-studio] local terminal failed: ${error}\r\n`);
+    pushLog("Terminal", `Open local terminal failed: ${error}`);
+    setStatus(`Open local terminal failed: ${error}`, { focusTerminal: true });
   }
 }
 
@@ -2130,17 +2131,25 @@ function blankLine(cols) {
   return Array.from({ length: cols }, () => " ");
 }
 
+function isMacOS() {
+  return (
+    typeof navigator !== "undefined" &&
+    (navigator.userAgent.includes("Mac") || (navigator.platform && navigator.platform.toUpperCase().includes("MAC")))
+  );
+}
+
 function ensureXterm() {
   if (xterm || !window.Terminal || !window.FitAddon?.FitAddon) return xterm;
+  const isMac = isMacOS();
   xterm = new window.Terminal({
     cursorBlink: true,
     convertEol: false,
-    fontFamily: '"Cascadia Code", Consolas, monospace',
+    fontFamily: isMac ? '"SF Mono", Menlo, Monaco, monospace' : '"Cascadia Code", Consolas, monospace',
     fontSize: 16,
     fontWeight: 700,
     lineHeight: 1.1,
     scrollback: 8000,
-    windowsMode: true,
+    windowsMode: !isMac,
     theme: {
       background: "#000000",
       foreground: "#ffffff",

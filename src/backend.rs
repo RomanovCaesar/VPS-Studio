@@ -588,16 +588,16 @@ pub async fn start_local_shell(
         let session_id = "local-terminal".to_owned();
         stop_shell_inner(&store, &session_id).await?;
 
-        let mut child = spawn_local_powershell(cols.unwrap_or(120), rows.unwrap_or(36))?;
-        let stdin = child.stdin.take().context("open local PowerShell stdin")?;
+        let mut child = spawn_local_shell(cols.unwrap_or(120), rows.unwrap_or(36))?;
+        let stdin = child.stdin.take().context("open local shell stdin")?;
         let stdout = child
             .stdout
             .take()
-            .context("open local PowerShell stdout")?;
+            .context("open local shell stdout")?;
         let stderr = child
             .stderr
             .take()
-            .context("open local PowerShell stderr")?;
+            .context("open local shell stderr")?;
 
         let output = Arc::new(StdMutex::new(String::new()));
         spawn_local_reader(
@@ -619,8 +619,16 @@ pub async fn start_local_shell(
             },
         );
 
+        let banner = if cfg!(target_os = "macos") {
+            "macOS Terminal (zsh)".to_owned()
+        } else if cfg!(target_os = "windows") {
+            "Windows PowerShell".to_owned()
+        } else {
+            "Local Terminal".to_owned()
+        };
+
         Ok(ConnectionSummary {
-            banner: "Windows PowerShell".to_owned(),
+            banner,
             home_path: String::new(),
             connected_at: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         })
@@ -665,40 +673,73 @@ async fn stop_shell_inner(store: &ShellStore, session_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn spawn_local_powershell(_cols: u32, _rows: u32) -> Result<Child> {
-    let mut last_error = None;
-    for program in ["powershell.exe", "pwsh.exe"] {
-        let mut command = Command::new(program);
-        command
-            .args([
-                "-NoLogo",
-                "-NoExit",
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new(); [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new();",
-            ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+fn spawn_local_shell(_cols: u32, _rows: u32) -> Result<Child> {
+    #[cfg(windows)]
+    {
+        let mut last_error = None;
+        for program in ["powershell.exe", "pwsh.exe", "cmd.exe"] {
+            let mut command = Command::new(program);
+            if program.contains("powershell") || program.contains("pwsh") {
+                command.args([
+                    "-NoLogo",
+                    "-NoExit",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new(); [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new();",
+                ]);
+            }
+            command
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
 
-        if let Some(home_dir) = dirs::home_dir() {
-            command.current_dir(home_dir);
+            if let Some(home_dir) = dirs::home_dir() {
+                command.current_dir(home_dir);
+            }
+
+            command.creation_flags(CREATE_NO_WINDOW);
+
+            match command.spawn() {
+                Ok(child) => return Ok(child),
+                Err(err) => last_error = Some(err),
+            }
         }
 
-        #[cfg(windows)]
-        command.creation_flags(CREATE_NO_WINDOW);
-
-        match command.spawn() {
-            Ok(child) => return Ok(child),
-            Err(err) => last_error = Some(err),
+        match last_error {
+            Some(err) => bail!("start local shell failed: {err}"),
+            None => bail!("start local shell failed"),
         }
     }
 
-    match last_error {
-        Some(err) => bail!("start local PowerShell failed: {err}"),
-        None => bail!("start local PowerShell failed"),
+    #[cfg(not(windows))]
+    {
+        let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+        let candidates = [user_shell.as_str(), "/bin/zsh", "/bin/bash", "/bin/sh"];
+        let mut last_error = None;
+        for program in candidates {
+            let mut command = Command::new(program);
+            command
+                .arg("-l")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+
+            if let Some(home_dir) = dirs::home_dir() {
+                command.current_dir(home_dir);
+            }
+
+            match command.spawn() {
+                Ok(child) => return Ok(child),
+                Err(err) => last_error = Some(err),
+            }
+        }
+
+        match last_error {
+            Some(err) => bail!("start local shell failed: {err}"),
+            None => bail!("start local shell failed"),
+        }
     }
 }
 

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v0.2.1)'
+        description: 'Release Tag (e.g. v0.2.2)'
         required: false
         default: ''
 
@@ -15,8 +15,8 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build (${{ matrix.arch }})
+  build-windows:
+    name: Build Windows (${{ matrix.arch }})
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -119,19 +119,139 @@ jobs:
               exit $LASTEXITCODE
           }
 
-          Write-Host "Build and packaging completed for $arch. Artifacts:"
+          Write-Host "Build and packaging completed for Windows $arch. Artifacts:"
           Get-ChildItem dist_artifacts
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-${{ matrix.arch }}
+          name: artifacts-windows-${{ matrix.arch }}
+          path: dist_artifacts/*
+          retention-days: 1
+
+  build-macos:
+    name: Build macOS (${{ matrix.arch }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            arch: arm64
+          - target: x86_64-apple-darwin
+            arch: x64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version info
+        id: get_version
+        shell: bash
+        run: |
+          tag="${{ inputs.tag_name || github.ref_name }}"
+          if [ -z "$tag" ] || [ "$tag" = "main" ] || [ "$tag" = "master" ]; then
+              tag="v0.2.0"
+          fi
+          if [[ "$tag" != v* ]]; then
+              version_with_v="v$tag"
+          else
+              version_with_v="$tag"
+          fi
+          version_number="${version_with_v#v}"
+          echo "VERSION=$version_with_v" >> $GITHUB_ENV
+          echo "VERSION_NUMBER=$version_number" >> $GITHUB_ENV
+          echo "Configured Release Version: $version_with_v (Numeric: $version_number)"
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build Rust / Tauri Executable
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Package macOS Application (.app, .dmg, .zip)
+        run: |
+          ARCH="${{ matrix.arch }}"
+          TARGET="${{ matrix.target }}"
+          VER="$VERSION"
+          VER_NUM="$VERSION_NUMBER"
+
+          mkdir -p dist_artifacts
+          STAGING_DIR="staging_$ARCH"
+          APP_DIR="$STAGING_DIR/VPS Studio.app"
+          mkdir -p "$APP_DIR/Contents/MacOS"
+          mkdir -p "$APP_DIR/Contents/Resources"
+
+          EXE_SOURCE="target/$TARGET/release/vps-studio"
+          if [ ! -f "$EXE_SOURCE" ]; then
+            echo "Error: Compiled binary not found at $EXE_SOURCE"
+            exit 1
+          fi
+
+          cp "$EXE_SOURCE" "$APP_DIR/Contents/MacOS/vps-studio"
+          chmod +x "$APP_DIR/Contents/MacOS/vps-studio"
+          if [ -f "icons/icon.icns" ]; then
+            cp "icons/icon.icns" "$APP_DIR/Contents/Resources/icon.icns"
+          fi
+
+          cat <<EOF > "$APP_DIR/Contents/Info.plist"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>vps-studio</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.caesars.vps-studio</string>
+    <key>CFBundleName</key>
+    <string>VPS Studio</string>
+    <key>CFBundleDisplayName</key>
+    <string>VPS Studio</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$VER_NUM</string>
+    <key>CFBundleVersion</key>
+    <string>$VER_NUM</string>
+    <key>CFBundleIconFile</key>
+    <string>icon.icns</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.15</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>
+EOF
+
+          # 1. Portable ZIP containing the .app bundle
+          (cd "$STAGING_DIR" && zip -r -q "../dist_artifacts/VPS-Studio-$VER-macos-$ARCH-Portable.zip" "VPS Studio.app")
+          echo "Created portable package: dist_artifacts/VPS-Studio-$VER-macos-$ARCH-Portable.zip"
+
+          # 2. Setup DMG installer
+          DMG_NAME="VPS-Studio-$VER-macos-$ARCH-Setup.dmg"
+          hdiutil create -volname "VPS Studio" -srcfolder "$APP_DIR" -ov -format UDZO "dist_artifacts/$DMG_NAME"
+          echo "Created DMG installer: dist_artifacts/$DMG_NAME"
+
+          ls -lh dist_artifacts/
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-macos-${{ matrix.arch }}
           path: dist_artifacts/*
           retention-days: 1
 
   release:
     name: Publish GitHub Release
-    needs: build
+    needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -161,7 +281,7 @@ jobs:
 
       - name: Verify Downloaded Assets
         run: |
-          echo "Files to attach to Release:"
+          echo "All release assets ready to publish:"
           ls -lh downloaded_artifacts/
 
       - name: Create or Update GitHub Release
