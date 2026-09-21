@@ -601,6 +601,14 @@ button:disabled {
   stroke-linejoin: round;
 }
 
+.side-icon svg.filled-svg,
+.mini-icon svg.filled-svg,
+.mini-card svg.filled-svg,
+.host-mark svg.filled-svg {
+  fill: currentColor !important;
+  stroke: none !important;
+}
+
 .host-mark.pink {
   background: rgba(239, 100, 165, 0.18);
   color: var(--pink);
@@ -1154,6 +1162,7 @@ tr:hover td {
 .file-name {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
   height: 100%;

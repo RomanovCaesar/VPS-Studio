@@ -749,11 +749,14 @@ function pushLog(kind, message, host = null) {
   const isEnd = message === t("Disconnected") + "." || message === "Closed local terminal.";
   if (!isStart && !isEnd) return;
 
-  const targetHost = host?.name || state.activeHost?.name || "";
+  const targetHostObj = host || state.activeHost || null;
+  const targetHost = targetHostObj?.name || "";
+  const targetHostId = targetHostObj?.id || "";
+  const targetHostOs = targetHostObj?.os || "";
   const now = Date.now();
 
   if (isEnd) {
-    const lastLog = state.logs.find(l => l.kind === kind && l.host === targetHost);
+    const lastLog = state.logs.find(l => l.kind === kind && (l.hostId ? l.hostId === targetHostId : l.host === targetHost));
     if (lastLog) {
       lastLog.endTimestamp = now;
       persistLogs();
@@ -768,6 +771,8 @@ function pushLog(kind, message, host = null) {
     kind,
     message: String(message || ""),
     host: targetHost,
+    hostId: targetHostId,
+    os: targetHostOs,
     user: host?.username || state.activeHost?.username || "",
   };
 
@@ -3102,7 +3107,7 @@ function sideIcon(id) {
     hosts: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1.4"/><rect x="4" y="10.5" width="16" height="5" rx="1.4"/><rect x="4" y="17" width="16" height="3" rx="1.2"/><circle cx="8" cy="6.5" r="0.8"/><circle cx="8" cy="13" r="0.8"/></svg>`,
     keychain: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M11.4 10.6 18 17.2M15.5 14.7l-2.1 2.1M18 17.2l-2.2 2.2"/></svg>`,
     snippets: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5c-2.4.8-2.4 3.1-1.1 4.4.7.7.7 1.5 0 2.2-1.3 1.3-1.3 3.6 1.1 4.4M15.5 5.5c2.4.8 2.4 3.1 1.1 4.4-.7.7-.7 1.5 0 2.2 1.3 1.3 1.3 3.6-1.1 4.4"/></svg>`,
-    knownHosts: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 13.5a5 5 0 1 1 10 0v3.2"/><path d="M9.8 13.2a2.2 2.2 0 1 1 4.4 0v4.2"/><path d="M5.5 16.8v-3.1a6.5 6.5 0 0 1 13 0v3.1"/><path d="M9 20v-3M12 20v-2M15 20v-3"/></svg>`,
+    knownHosts: fingerprintIcon(),
     logs: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><path d="M12 7.5V12l-3.2 2"/></svg>`,
   };
   return icons[id] || "";
@@ -3329,12 +3334,12 @@ function closeIcon() {
 }
 
 function fingerprintIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" style="fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round;">
-    <path d="M2 12C2 6.48 6.48 2 12 2s10 4.48 10 10"/>
-    <path d="M5 19.5A9.9 9.9 0 0 1 6 12a6 6 0 0 1 12 0c0 3.3-1.3 6.3-3.5 8.5"/>
-    <path d="M8.5 22a7.9 7.9 0 0 1-3.5-6.5 8 8 0 0 1 14 0c0 2-.8 4-2.2 5.5"/>
-    <path d="M11 22v-5a3 3 0 0 1 6 0"/>
-    <path d="M14 13a2 2 0 0 0-4 0v9"/>
+  return `<svg class="filled-svg" viewBox="0 0 32 32" aria-hidden="true" style="fill:currentColor; stroke:none;">
+    <path fill="currentColor" d="M23.7,5.9c-0.1,0.0 -0.2,0.0 -0.3,-0.1C21.0,4.5 18.6,3.9 16.0,3.9c-2.5,0.0 -4.6,0.6 -6.9,1.9C8.8,6.0 8.3,5.9 8.1,5.5C7.9,5.2 8.0,4.7 8.4,4.5c2.5,-1.4 4.9,-2.1 7.7,-2.1c2.8,0.0 5.4,0.7 8.0,2.1c0.4,0.2 0.5,0.6 0.3,1.0C24.2,5.7 24.0,5.9 23.7,5.9z"/>
+    <path fill="currentColor" d="M5.3,13.2c-0.1,0.0 -0.3,0.0 -0.4,-0.1c-0.3,-0.2 -0.4,-0.7 -0.2,-1.0c1.3,-1.9 2.9,-3.4 4.9,-4.5c4.1,-2.2 9.3,-2.2 13.4,0.0c1.9,1.1 3.6,2.5 4.9,4.4c0.2,0.3 0.1,0.8 -0.2,1.0c-0.3,0.2 -0.8,0.1 -1.0,-0.2c-1.2,-1.7 -2.6,-3.0 -4.3,-4.0c-3.7,-2.0 -8.3,-2.0 -12.0,0.0c-1.7,0.9 -3.2,2.3 -4.3,4.0C5.7,13.1 5.5,13.2 5.3,13.2z"/>
+    <path fill="currentColor" d="M13.3,29.6c-0.2,0.0 -0.4,-0.1 -0.5,-0.2c-1.1,-1.2 -1.7,-2.0 -2.6,-3.6c-0.9,-1.7 -1.4,-3.7 -1.4,-5.9c0.0,-4.1 3.3,-7.4 7.4,-7.4c4.1,0.0 7.4,3.3 7.4,7.4c0.0,0.4 -0.3,0.7 -0.7,0.7s-0.7,-0.3 -0.7,-0.7c0.0,-3.3 -2.7,-5.9 -5.9,-5.9c-3.3,0.0 -5.9,2.7 -5.9,5.9c0.0,2.0 0.4,3.8 1.2,5.2c0.8,1.6 1.4,2.2 2.4,3.3c0.3,0.3 0.3,0.8 0.0,1.0C13.7,29.5 13.5,29.6 13.3,29.6z"/>
+    <path fill="currentColor" d="M22.6,27.1c-1.6,0.0 -2.9,-0.4 -4.1,-1.2c-1.9,-1.4 -3.1,-3.6 -3.1,-6.0c0.0,-0.4 0.3,-0.7 0.7,-0.7s0.7,0.3 0.7,0.7c0.0,1.9 0.9,3.7 2.5,4.8c0.9,0.6 1.9,1.0 3.2,1.0c0.3,0.0 0.8,0.0 1.3,-0.1c0.4,-0.1 0.8,0.2 0.8,0.6c0.1,0.4 -0.2,0.8 -0.6,0.8C23.4,27.1 22.8,27.1 22.6,27.1z"/>
+    <path fill="currentColor" d="M20.0,29.9c-0.1,0.0 -0.1,0.0 -0.2,0.0c-2.1,-0.6 -3.4,-1.4 -4.8,-2.9c-1.8,-1.9 -2.8,-4.4 -2.8,-7.1c0.0,-2.2 1.8,-4.1 4.1,-4.1c2.2,0.0 4.1,1.8 4.1,4.1c0.0,1.4 1.2,2.6 2.6,2.6c1.4,0.0 2.6,-1.2 2.6,-2.6c0.0,-5.1 -4.2,-9.3 -9.3,-9.3c-3.6,0.0 -6.9,2.1 -8.4,5.4C7.3,17.1 7.0,18.4 7.0,19.8c0.0,1.1 0.1,2.7 0.9,4.9c0.1,0.4 -0.1,0.8 -0.4,0.9c-0.4,0.1 -0.8,-0.1 -0.9,-0.4c-0.6,-1.8 -0.9,-3.6 -0.9,-5.4c0.0,-1.6 0.3,-3.1 0.9,-4.4c1.7,-3.8 5.6,-6.3 9.8,-6.3c5.9,0.0 10.7,4.8 10.7,10.7c0.0,2.2 -1.8,4.1 -4.1,4.1s-4.0,-1.8 -4.0,-4.1c0.0,-1.4 -1.2,-2.6 -2.6,-2.6c-1.4,0.0 -2.6,1.2 -2.6,2.6c0.0,2.3 0.9,4.5 2.4,6.1c1.2,1.3 2.4,2.0 4.2,2.5c0.4,0.1 0.6,0.5 0.5,0.9C20.6,29.7 20.3,29.9 20.0,29.9z"/>
   </svg>`;
 }
 
@@ -3631,9 +3636,15 @@ function renderLogsPage() {
 function renderLogRow(row) {
   let hostContent = "";
   if (row.host) {
+    const matchedHost = (row.hostId && state.hosts.find(h => h.id === row.hostId))
+      || state.hosts.find(h => h.name === row.host || h.host === row.host)
+      || null;
+    const os = row.os || matchedHost?.os || "";
+    const { svg, color } = osIcon(os);
+
     hostContent = `
       <div style="display:flex; align-items:center; gap:12px;">
-        <div class="host-mark pink" style="width:32px; height:32px; border-radius:8px;">${hostMarkIcon()}</div>
+        <div class="host-mark" style="width:32px; height:32px; border-radius: var(--md-sys-shape-corner-small); background: ${color}; color: #ffffff; display:flex; align-items:center; justify-content:center;">${svg}</div>
         <div style="display:flex; flex-direction:column; gap:2px;">
           <strong style="color:var(--text); font-size:13px; font-weight:600;">${escapeHtml(row.host)}</strong>
           <span style="font-size:12px; color:var(--muted);">ssh, ${escapeHtml(row.user || "root")}</span>
