@@ -1,0 +1,35 @@
+# Rust & Tauri build artifacts
+/target
+/gen
+
+# IDE and Editor configurations
+/.idea
+/.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Compiled binaries and debug files
+*.pdb
+*.exe
+*.log
+
+# Dependencies
+/node_modules
+
+# Temporary and local development files
+/tmp
+/.tmp_blackbox
+/.agents
+round_corners.py
+debian.svg
+order_system_use_case.*
+
+# Coursework & school assignment assets
+/docs
+/final
+/ppt
+/work
+/readme

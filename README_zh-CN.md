@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-blue?style=flat-square" alt="Platform: Windows" />
   <img src="https://img.shields.io/badge/Framework-Tauri-ffc131?style=flat-square" alt="Framework: Tauri" />
   <img src="https://img.shields.io/badge/Language-Rust%20%26%20JavaScript-orange?style=flat-square" alt="Language: Rust/JS" />
-  <img src="https://img.shields.io/badge/License-Proprietary-red?style=flat-square" alt="License" />
+  <img src="https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey?style=flat-square" alt="License: CC BY-NC-SA 4.0" />
 </div>
 
 <br>
@@ -63,6 +63,16 @@ VPS Studio 提供了极其灵活的使用方式，满足不同用户群体的使
 - **Backend / Core**: Rust, Tauri
 - **Terminal Emulator**: xterm.js (集成)
 - **Installer Engine**: Inno Setup
+
+## 📄 开源许可证 (License)
+
+本项目采用 **知识共享 署名-非商业性使用-相同方式共享 4.0 国际许可协议 (CC BY-NC-SA 4.0)** 开源。
+
+- **署名 (BY)**：您必须给出适当的署名，提供指向本许可协议的链接，并标明是否对原有作品进行了修改。
+- **非商业性使用 (NC)**：您不得将本软件及源代码用于任何商业盈利目的或二次打包售卖。
+- **相同方式共享 (SA)**：如果您再混合、转换或者基于本作品进行创作，您必须基于与原先许可协议相同的许可协议分发您贡献的作品。
+
+详细许可协议内容请参见 [LICENSE](LICENSE) 文件。
 
 ---
 <div align="center">

@@ -1,0 +1,29 @@
+[package]
+name = "vps-studio"
+version = "0.2.0"
+edition = "2021"
+authors = ["Caesars Network LLC"]
+description = "A modern, high-performance, fully local server management & SSH client."
+license = "CC-BY-NC-SA-4.0"
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["clock", "serde"] }
+dirs = "5"
+open = "5"
+russh = { version = "0.61.2", default-features = false, features = ["ring", "rsa", "flate2"] }
+russh-sftp = "2.3.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+getrandom = { version = "0.4.3", features = ["sys_rng"] }
+ssh-key = { version = "0.7.0-rc.10", features = ["crypto"] }
+tauri = { version = "2.11.3", features = [] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "io-util", "fs", "sync"] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

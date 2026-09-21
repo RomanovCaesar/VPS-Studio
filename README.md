@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-blue?style=flat-square" alt="Platform: Windows" />
   <img src="https://img.shields.io/badge/Framework-Tauri-ffc131?style=flat-square" alt="Framework: Tauri" />
   <img src="https://img.shields.io/badge/Language-Rust%20%26%20JavaScript-orange?style=flat-square" alt="Language: Rust/JS" />
-  <img src="https://img.shields.io/badge/License-Proprietary-red?style=flat-square" alt="License" />
+  <img src="https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey?style=flat-square" alt="License: CC BY-NC-SA 4.0" />
 </div>
 
 <br>
@@ -63,6 +63,16 @@ Download `VPS-Studio-version-Setup.exe`.
 - **Backend / Core**: Rust, Tauri
 - **Terminal Emulator**: xterm.js (Integrated)
 - **Installer Engine**: Inno Setup
+
+## 📄 License
+
+This project is licensed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)** License.
+
+- **Attribution (BY)**: You must give appropriate credit, provide a link to the license, and indicate if changes were made.
+- **NonCommercial (NC)**: You may not use the material for commercial or profit-making purposes.
+- **ShareAlike (SA)**: If you remix, transform, or build upon the material, you must distribute your contributions under the same license as the original.
+
+See the [LICENSE](LICENSE) file for the full license text.
 
 ---
 <div align="center">
