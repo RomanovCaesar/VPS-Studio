@@ -1,0 +1,175 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v0.2.1)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            arch: x64
+            msvc_arch: x64
+            inno_arch: x64compatible
+          - target: aarch64-pc-windows-msvc
+            arch: arm64
+            msvc_arch: amd64_arm64
+            inno_arch: arm64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version info
+        id: get_version
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.tag_name || github.ref_name }}"
+          if (-not $tag -or $tag -eq "main" -or $tag -eq "master") {
+              $tag = "v0.2.0"
+          }
+          $versionWithV = if ($tag.StartsWith("v")) { $tag } else { "v$tag" }
+          $versionNumber = $tag.TrimStart("v")
+          "VERSION=$versionWithV" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VERSION_NUMBER=$versionNumber" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Configured Release Version: $versionWithV (Numeric: $versionNumber)"
+
+      - name: Setup MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Fix MSVC Linker Shadowing
+        shell: pwsh
+        run: |
+          Remove-Item 'C:\Program Files\Git\usr\bin\link.exe' -Force -ErrorAction SilentlyContinue
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup -y
+
+      - name: Build Rust / Tauri Executable
+        shell: pwsh
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Package Artifacts (Portable ZIP & Setup EXE)
+        shell: pwsh
+        run: |
+          $arch = "${{ matrix.arch }}"
+          $target = "${{ matrix.target }}"
+          $innoArch = "${{ matrix.inno_arch }}"
+          $ver = $env:VERSION
+          $verNum = $env:VERSION_NUMBER
+
+          New-Item -ItemType Directory -Force -Path "dist_artifacts"
+          New-Item -ItemType Directory -Force -Path "staging_$arch"
+
+          $exeSource = "target\$target\release\vps-studio.exe"
+          if (-not (Test-Path $exeSource)) {
+              Write-Error "Compiled executable not found at: $exeSource"
+              exit 1
+          }
+
+          Copy-Item $exeSource "staging_$arch\vps-studio.exe" -Force
+
+          # 1. Portable ZIP
+          $zipName = "VPS-Studio-$ver-windows-$arch-Portable.zip"
+          $zipPath = "dist_artifacts\$zipName"
+          Compress-Archive -Path "staging_$arch\vps-studio.exe" -DestinationPath $zipPath -Force
+          Write-Host "Created portable package: $zipPath"
+
+          # 2. Setup EXE (Inno Setup)
+          $setupBaseName = "VPS-Studio-$ver-windows-$arch-Setup"
+          & iscc /DAppVersion="$verNum" `
+                 /DAppArch="$innoArch" `
+                 /DSourceExe="$exeSource" `
+                 /DOutputBaseFilename="$setupBaseName" `
+                 /DOutputDir="dist_artifacts" `
+                 installer.iss
+
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Inno Setup installer generation failed!"
+              exit $LASTEXITCODE
+          }
+
+          Write-Host "Build and packaging completed for $arch. Artifacts:"
+          Get-ChildItem dist_artifacts
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.arch }}
+          path: dist_artifacts/*
+          retention-days: 1
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve Release Tag
+        id: resolve_tag
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag_name || github.ref_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "main" ] || [ "$TAG" = "master" ]; then
+            TAG="v0.2.0"
+          fi
+          if [[ "$TAG" != v* ]]; then
+            TAG="v$TAG"
+          fi
+          echo "TAG_NAME=$TAG" >> $GITHUB_ENV
+          echo "Release tag: $TAG"
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded_artifacts
+          merge-multiple: true
+
+      - name: Verify Downloaded Assets
+        run: |
+          echo "Files to attach to Release:"
+          ls -lh downloaded_artifacts/
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: VPS Studio ${{ env.TAG_NAME }}
+          draft: false
+          prerelease: false
+          files: downloaded_artifacts/*
+          generate_release_notes: true
