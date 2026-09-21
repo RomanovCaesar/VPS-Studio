@@ -3010,17 +3010,16 @@ function renderTopbar() {
   const terminalAction = state.sessionKind === "local" ? "local-terminal-tab" : "session-tab";
   return `
     <header class="topbar">
-      <style>.lang-btn:hover { background: var(--bg-hover) !important; color: var(--text) !important; }</style>
-      <div class="lang-menu" style="position: relative; margin-right: 12px; display: flex; align-items: center; -webkit-app-region: no-drag;">
-        <button class="icon-btn quiet" onclick="event.stopPropagation(); state.languageMenuOpen = !state.languageMenuOpen; render();" title="${t('Language')}" style="-webkit-app-region: no-drag; margin-left: auto;">
+      <div class="lang-menu">
+        <button class="icon-btn quiet" onclick="event.stopPropagation(); state.languageMenuOpen = !state.languageMenuOpen; render();" title="${t('Language')}">
           <svg viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
         </button>
         ${state.languageMenuOpen ? `
           <div onclick="event.stopPropagation(); state.languageMenuOpen = false; render();" style="position:fixed; inset:0; z-index:999;"></div>
-          <div class="lang-dropdown" style="position: absolute; top: 100%; left: 0; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px; display: flex; flex-direction: column; gap: 2px; min-width: 120px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-            <div class="lang-option-title" style="padding: 6px 12px; font-size: 13px; color: var(--text-muted); pointer-events: none;">${t('Language')}</div>
-            <button class="lang-option" onclick="toggleLanguage('zh')" onmouseover="this.style.background='var(--panel-3)'" onmouseout="this.style.background='${state.language === 'zh' ? 'var(--panel-3)' : 'transparent'}'" style="background: ${state.language === 'zh' ? 'var(--panel-3)' : 'transparent'}; border: none; padding: 6px 12px; text-align: left; color: var(--text); border-radius: 4px; cursor: default; transition: background 0.2s;">简体中文</button>
-            <button class="lang-option" onclick="toggleLanguage('en')" onmouseover="this.style.background='var(--panel-3)'" onmouseout="this.style.background='${state.language === 'en' ? 'var(--panel-3)' : 'transparent'}'" style="background: ${state.language === 'en' ? 'var(--panel-3)' : 'transparent'}; border: none; padding: 6px 12px; text-align: left; color: var(--text); border-radius: 4px; cursor: default; transition: background 0.2s;">English</button>
+          <div class="lang-dropdown">
+            <div class="lang-option-title">${t('Language')}</div>
+            <button class="lang-option ${state.language === 'zh' ? 'active' : ''}" onclick="toggleLanguage('zh')">简体中文</button>
+            <button class="lang-option ${state.language === 'en' ? 'active' : ''}" onclick="toggleLanguage('en')">English</button>
           </div>
         ` : ''}
       </div>
@@ -3044,22 +3043,22 @@ function renderTopbar() {
 function renderUntrustedHostPrompt() {
   const p = state.untrustedHostPrompt;
   return `
-    <div style="position: absolute; inset: 0; background: var(--bg); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-      <div style="text-align: center; max-width: 500px;">
-        <div style="display:flex; justify-content:center; align-items:center; margin-bottom:24px; gap:16px;">
-           <div class="host-mark pink" style="width:48px; height:48px; border-radius:12px;">${hostMarkIcon()}</div>
+    <div class="modal-backdrop" style="position: fixed; inset: 0; z-index: 2000; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(8px); display: flex; flex-direction: column; justify-content: center; align-items: center;">
+      <div class="dialog m3-dialog" style="text-align: center; max-width: 500px; width: 90%; padding: 28px; border-radius: var(--md-sys-shape-corner-extra-large); background: var(--md-sys-color-surface-container-high); box-shadow: var(--md-sys-elevation-3); border: 1px solid var(--md-sys-color-outline-variant);">
+        <div style="display:flex; justify-content:center; align-items:center; margin-bottom:20px; gap:16px;">
+           <div class="host-mark pink" style="width:48px; height:48px; border-radius: var(--md-sys-shape-corner-medium);">${hostMarkIcon()}</div>
            <div style="text-align:left;">
-             <div style="font-weight:600; color:white; font-size:16px;">${escapeHtml(p.host.name)}</div>
-             <div style="color:var(--muted); font-size:12px;">SSH ${escapeHtml(p.host.host)}:${p.host.port}</div>
+             <div style="font-weight:700; color:var(--md-sys-color-on-surface); font-size:16px;">${escapeHtml(p.host.name)}</div>
+             <div style="color:var(--md-sys-color-on-surface-variant); font-size:12px;">SSH ${escapeHtml(p.host.host)}:${p.host.port}</div>
            </div>
         </div>
-        <h3 style="margin-bottom:16px; font-size:16px; font-weight:600;">${t("Are you sure you want to connect?")}</h3>
-        <p style="margin-bottom:16px; font-size:13px; color: var(--faint);">${t("The authenticity of")} <strong style="color: var(--text);">${escapeHtml(p.host.host)}</strong> ${t("can not be established.")}</p>
-        <p style="margin-bottom:16px; font-size:13px; color: var(--faint);">${t("ECDSA fingerprint is SHA256:")}<br/><strong style="word-break:break-all; user-select:all; color: var(--text);">${escapeHtml(p.fingerprint)}</strong></p>
-        <p style="margin-bottom:32px; font-size:13px;">${t("Do you want to add it to the list of known hosts?")}</p>
-        <div class="form-actions" style="justify-content: center; gap:16px;">
-          <button class="btn secondary" data-action="untrusted-close">${t("Close")}</button>
-          <button class="btn secondary" data-action="untrusted-continue">${t("Continue")}</button>
+        <h3 style="margin-bottom:14px; font-size:18px; font-weight:700; color: var(--md-sys-color-on-surface);">${t("Are you sure you want to connect?")}</h3>
+        <p style="margin-bottom:12px; font-size:13.5px; color: var(--md-sys-color-on-surface-variant);">${t("The authenticity of")} <strong style="color: var(--md-sys-color-on-surface);">${escapeHtml(p.host.host)}</strong> ${t("can not be established.")}</p>
+        <p style="margin-bottom:16px; font-size:13px; color: var(--md-sys-color-on-surface-variant);">${t("ECDSA fingerprint is SHA256:")}<br/><strong style="word-break:break-all; user-select:all; color: var(--md-sys-color-primary); font-family: 'Cascadia Code', 'SF Mono', monospace; font-size: 12px; display: inline-block; margin-top: 4px;">${escapeHtml(p.fingerprint)}</strong></p>
+        <p style="margin-bottom:28px; font-size:13.5px; color: var(--md-sys-color-on-surface);">${t("Do you want to add it to the list of known hosts?")}</p>
+        <div class="form-actions" style="display: flex; justify-content: center; gap:12px;">
+          <button class="btn ghost" data-action="untrusted-close">${t("Close")}</button>
+          <button class="btn ghost" data-action="untrusted-continue">${t("Continue")}</button>
           <button class="btn primary" data-action="untrusted-add">${t("Add and continue")}</button>
         </div>
       </div>
@@ -3340,7 +3339,7 @@ function fingerprintIcon() {
 }
 
 function osIcon(os) {
-  const defaultIcon = { svg: `<svg viewBox="0 0 24 24" aria-hidden="true" style="fill:none; stroke:currentColor;"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><circle cx="7" cy="7" r="1.5"/><circle cx="11" cy="7" r="1.5"/><circle cx="15" cy="7" r="1.5"/><circle cx="7" cy="17" r="1.5"/><circle cx="11" cy="17" r="1.5"/><circle cx="15" cy="17" r="1.5"/></svg>`, color: "#0061a6" };
+  const defaultIcon = { svg: `<svg viewBox="0 0 24 24" aria-hidden="true" style="fill:none; stroke:currentColor;"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><circle cx="7" cy="7" r="1.5"/><circle cx="11" cy="7" r="1.5"/><circle cx="15" cy="7" r="1.5"/><circle cx="7" cy="17" r="1.5"/><circle cx="11" cy="17" r="1.5"/><circle cx="15" cy="17" r="1.5"/></svg>`, color: "var(--md-sys-color-primary)" };
   if (!os) return defaultIcon;
   const lower = os.toLowerCase();
   
@@ -3515,7 +3514,7 @@ function renderIdentityCard(ident) {
   const authText = ident.auth?.kind === "password" ? "Auth password" : "Auth key";
   return `
     <article class="mini-card identity-card ${state.selectedIdentityId === ident.id ? "active" : ""}" data-identity-id="${escapeAttr(ident.id)}">
-      <div class="mini-icon" style="background:#0061a6; color:#fff">${identityIcon()}</div>
+      <div class="mini-icon" style="background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);">${identityIcon()}</div>
       <div class="card-content">
         <div class="host-name truncate-text">${escapeHtml(identityLabel(ident))}</div>
         <div class="host-meta truncate-text">${authText}</div>
@@ -3644,7 +3643,7 @@ function renderLogRow(row) {
   } else {
     hostContent = `
       <div style="display:flex; align-items:center; gap:12px;">
-        <div class="host-mark" style="width:32px; height:32px; border-radius:8px; background:#2b3148; display:flex; align-items:center; justify-content:center;">
+        <div class="host-mark" style="width:32px; height:32px; border-radius: var(--md-sys-shape-corner-small); background: var(--md-sys-color-surface-container-highest); color: var(--md-sys-color-on-surface-variant); display:flex; align-items:center; justify-content:center;">
            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
         </div>
         <div style="display:flex; flex-direction:column; gap:2px;">
@@ -4011,7 +4010,7 @@ function renderIdentityDetails() {
     <div class="page-grid" style="gap:12px;">
       ${linkedHosts.map((h) => `
         <article class="mini-card host-card" style="padding-right: 16px;">
-          <div class="mini-icon" style="background:#e91e63; color:#fff">${hostMarkIcon()}</div>
+          <div class="mini-icon" style="background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container);">${hostMarkIcon()}</div>
           <div class="card-content">
             <div class="host-name truncate-text">${escapeHtml(h.name || h.host)}</div>
             <div class="host-meta truncate-text">ssh, ${escapeHtml(h.username || "root")}</div>
@@ -4273,7 +4272,7 @@ function renderHostIdentityMenu() {
       ${state.identities.map((ident) => `
         <button data-action="select-host-identity" data-identity-id="${escapeAttr(ident.id)}">
           <div style="display:flex; align-items:center; gap:8px;">
-            <div style="color:#0061a6; width:16px; height:16px;">${identityIcon()}</div>
+            <div style="color: var(--md-sys-color-primary); width:16px; height:16px;">${identityIcon()}</div>
             <span>${escapeHtml(identityLabel(ident))}</span>
           </div>
         </button>
@@ -4326,8 +4325,8 @@ function renderHostDetails() {
           ${
             host.identityId
               ? `
-                <div class="identity-box" style="position:relative; display:flex; align-items:center; background:#2b3148; padding:8px 12px; border-radius:6px; border:1px solid #0061a6; cursor:pointer;" data-action="toggle-host-identity-menu">
-                  <div style="color:#0061a6; margin-right:12px; width:24px; height:24px;">${identityIcon()}</div>
+                <div class="identity-box" style="position:relative; display:flex; align-items:center; background: var(--md-sys-color-surface-container-high); padding:8px 12px; border-radius: var(--md-sys-shape-corner-medium); border: 1px solid var(--md-sys-color-primary); cursor:pointer;" data-action="toggle-host-identity-menu">
+                  <div style="color: var(--md-sys-color-primary); margin-right:12px; width:24px; height:24px;">${identityIcon()}</div>
                   <div style="flex:1;">
                     <strong style="color:var(--text); font-size:13px; display:block;">${escapeHtml(identityLabel(state.identities.find(i => i.id === host.identityId)))}</strong>
                     <span style="color:var(--muted); font-size:12px;">${t("Identity")}</span>
