@@ -3104,11 +3104,11 @@ function renderSideNav() {
 
 function sideIcon(id) {
   const icons = {
-    hosts: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1.4"/><rect x="4" y="10.5" width="16" height="5" rx="1.4"/><rect x="4" y="17" width="16" height="3" rx="1.2"/><circle cx="8" cy="6.5" r="0.8"/><circle cx="8" cy="13" r="0.8"/></svg>`,
-    keychain: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M11.4 10.6 18 17.2M15.5 14.7l-2.1 2.1M18 17.2l-2.2 2.2"/></svg>`,
-    snippets: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5c-2.4.8-2.4 3.1-1.1 4.4.7.7.7 1.5 0 2.2-1.3 1.3-1.3 3.6 1.1 4.4M15.5 5.5c2.4.8 2.4 3.1 1.1 4.4-.7.7-.7 1.5 0 2.2 1.3 1.3 1.3 3.6-1.1 4.4"/></svg>`,
+    hosts: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><circle cx="7" cy="7" r="1"/><circle cx="7" cy="17" r="1"/><line x1="14" y1="7" x2="17" y2="7"/><line x1="14" y1="17" x2="17" y2="17"/></svg>`,
+    keychain: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 8.3-8.3M15.5 7.5l3 3M19 4l2 2"/></svg>`,
+    snippets: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`,
     knownHosts: fingerprintIcon(),
-    logs: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><path d="M12 7.5V12l-3.2 2"/></svg>`,
+    logs: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>`,
   };
   return icons[id] || "";
 }
@@ -3293,19 +3293,23 @@ function contextSnippet() {
 }
 
 function pencilIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4.8L19.5 9.3a2.1 2.1 0 0 0 0-3L17.7 4.5a2.1 2.1 0 0 0-3 0L4 15.2V20Z"/><path d="m13.8 5.4 4.8 4.8"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`;
+}
+
+function sortIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="8" y2="18"/></svg>`;
 }
 
 function sortAzIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M4 14.999L8 19l4-4.001"/><path d="M8 19V5"/><path d="M14 7h4l-4 6h4"/><path d="M20 19h-4v-4h4v4z"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="m3 8 4-4 4 4M7 4v16"/><path d="M15 4h5l-5 6h5M15 20v-6h4a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-4z"/></svg>`;
 }
 
 function sortZaIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M4 14.999L8 19l4-4.001"/><path d="M8 19V5"/><path d="M14 17h4l-4-6h4"/><path d="M20 5h-4v4h4V5z"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="m3 8 4-4 4 4M7 4v16"/><path d="M15 10h5l-5-6h5M15 14v6h4a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-4z"/></svg>`;
 }
 
 function calendarIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
 }
 
 function checkIcon() {
@@ -3313,24 +3317,24 @@ function checkIcon() {
 }
 
 function searchIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>`;
 }
 
 
 function plugIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v5M16 3v5M7 8h10v3a5 5 0 0 1-10 0V8Z"/><path d="M12 16v5"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v5M16 3v5M7 8h10v3a5 5 0 0 1-10 0V8Z"/><path d="M12 16v5"/></svg>`;
 }
 
 function copyIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
 }
 
 function trashIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
 }
 
 function closeIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" style="fill:none; stroke:currentColor;"><path d="M6 6l12 12M18 6 6 18"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
 }
 
 function fingerprintIcon() {
@@ -3343,7 +3347,7 @@ function fingerprintIcon() {
 }
 
 function osIcon(os) {
-  const defaultIcon = { svg: `<svg viewBox="0 0 24 24" aria-hidden="true" style="fill:none; stroke:currentColor;"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><circle cx="7" cy="7" r="1.5"/><circle cx="11" cy="7" r="1.5"/><circle cx="15" cy="7" r="1.5"/><circle cx="7" cy="17" r="1.5"/><circle cx="11" cy="17" r="1.5"/><circle cx="15" cy="17" r="1.5"/></svg>`, color: "var(--md-sys-color-primary)" };
+  const defaultIcon = { svg: `<svg viewBox="0 0 24 24" aria-hidden="true" style="fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><circle cx="7" cy="7" r="1"/><circle cx="7" cy="17" r="1"/><line x1="14" y1="7" x2="17" y2="7"/><line x1="14" y1="17" x2="17" y2="17"/></svg>`, color: "var(--md-sys-color-primary)" };
   if (!os) return defaultIcon;
   const lower = os.toLowerCase();
   
@@ -3373,7 +3377,7 @@ function osIcon(os) {
 }
 
 function groupIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="8" height="8" rx="1.5"/><rect x="12" y="11" width="8" height="8" rx="1.5"/><rect x="7" y="14" width="6" height="6" rx="1.2"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
 }
 
 function gridIcon() {
@@ -3381,15 +3385,15 @@ function gridIcon() {
 }
 
 function hostMarkIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21c-4.2-2.8-7-6.2-7-10a7 7 0 0 1 14 0c0 3.8-2.8 7.2-7 10Z"/><path d="M12 13.7a2.7 2.7 0 1 0 0-5.4 2.7 2.7 0 0 0 0 5.4Z"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c-4.2-2.8-7-6.2-7-10a7 7 0 0 1 14 0c0 3.8-2.8 7.2-7 10Z"/><circle cx="12" cy="11" r="2.5"/></svg>`;
 }
 
 function keySmallIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8.5" cy="8.5" r="3.5"/><path d="M11.2 11.2 19 19M15.7 15.7l-2.1 2.1"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 8.3-8.3M15.5 7.5l3 3M19 4l2 2"/></svg>`;
 }
 
 function passwordIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="9" width="16" height="10" rx="2"/><path d="M8 9V7a4 4 0 0 1 8 0v2"/><path d="M9 14h.01M12 14h.01M15 14h.01"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg>`;
 }
 
 function renderToolstripRight(showSearchBox = false) {
@@ -3406,7 +3410,7 @@ function renderToolstripRight(showSearchBox = false) {
       `}
     ` : ""}
     <div style="position: relative;">
-      <button class="btn square ghost" data-action="toggle-sort-menu">${calendarIcon()}</button>
+      <button class="btn square ghost" data-action="toggle-sort-menu">${sortIcon()}</button>
       ${state.sortMenuOpen ? renderSortMenu() : ""}
     </div>
   `;
@@ -3511,7 +3515,7 @@ function getKeyTypeDisplay(key) {
 }
 
 function identityIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" ry="2"></rect><circle cx="8.5" cy="10.5" r="2.5"></circle><line x1="14" y1="10" x2="19" y2="10"></line><line x1="14" y1="14" x2="19" y2="14"></line><line x1="5" y1="17" x2="12" y2="17"></line></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/><circle cx="12" cy="12" r="2.5"/><path d="M7.5 18c0-1.8 2-2.5 4.5-2.5s4.5.7 4.5 2.5"/></svg>`;
 }
 
 function renderIdentityCard(ident) {
@@ -3554,7 +3558,7 @@ function renderSnippetsPage() {
 }
 
 function snippetIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5c-2.4.8-2.4 3.1-1.1 4.4.7.7.7 1.5 0 2.2-1.3 1.3-1.3 3.6 1.1 4.4M15.5 5.5c2.4.8 2.4 3.1 1.1 4.4-.7.7-.7 1.5 0 2.2 1.3 1.3 1.3 3.6-1.1 4.4"/></svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`;
 }
 
 function renderSnippetCard(snippet) {
