@@ -31,16 +31,46 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 const METRICS_SCRIPT: &str = r#"
+export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C
+export LANG=C
 os_str=$(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME")
 [ -z "$os_str" ] && os_str=$(uname -srmo 2>/dev/null)
 echo "OS|$os_str"
 awk '{printf "UPTIME|%s\n",$1}' /proc/uptime 2>/dev/null
 awk '{printf "LOAD|%s|%s|%s\n",$1,$2,$3}' /proc/loadavg 2>/dev/null
-free -b | awk '/^Mem:/ {printf "MEM|%s|%s\n",$3,$2} /^Swap:/ {printf "SWAP|%s|%s\n",$3,$2}'
-top -bn1 | awk -F',' '/Cpu|%Cpu/ { for (i=1;i<=NF;i++) if ($i ~ / id/) { gsub(/[^0-9.]/,"",$i); printf "CPU|%.2f\n",100-$i; exit } }'
+free -b 2>/dev/null | awk '/^Mem:/ {printf "MEM|%s|%s\n",$3,$2} /^Swap:/ {printf "SWAP|%s|%s\n",$3,$2}'
 awk 'NR>2 {gsub(":","",$1); printf "NET|%s|%s|%s\n",$1,$2,$10}' /proc/net/dev 2>/dev/null
 df -B1 --output=target,used,size 2>/dev/null | awk 'NR>1 {printf "DISK|%s|%s|%s\n",$1,$2,$3}'
 ps -eo rss,pcpu,comm --sort=-rss 2>/dev/null | awk 'NR>1 && NR<8 {printf "PROC|%s|%s|%s\n",$1,$2,$3}'
+if [ -f /proc/stat ]; then
+  read -r _ u1 n1 s1 i1 w1 q1 sq1 st1 _ < /proc/stat 2>/dev/null
+  sleep 0.2
+  read -r _ u2 n2 s2 i2 w2 q2 sq2 st2 _ < /proc/stat 2>/dev/null
+  awk -v u1="$u1" -v n1="$n1" -v s1="$s1" -v i1="$i1" -v w1="$w1" -v q1="$q1" -v sq1="$sq1" -v st1="$st1" \
+      -v u2="$u2" -v n2="$n2" -v s2="$s2" -v i2="$i2" -v w2="$w2" -v q2="$q2" -v sq2="$sq2" -v st2="$st2" '
+  BEGIN {
+    i_diff = (i2 + w2) - (i1 + w1)
+    t_diff = (u2 + n2 + s2 + i2 + w2 + q2 + sq2 + st2) - (u1 + n1 + s1 + i1 + w1 + q1 + sq1 + st1)
+    if (t_diff > 0) {
+      pct = (1.0 - i_diff / t_diff) * 100.0
+      if (pct < 0) pct = 0; if (pct > 100) pct = 100
+      printf "CPU|%.2f\n", pct
+    } else {
+      printf "CPU|0.00\n"
+    }
+    printf "CPUTICKS|%s|%s|%s|%s|%s|%s|%s|%s\n", u2, n2, s2, i2, w2, q2, sq2, st2
+  }' 2>/dev/null
+else
+  top -bn1 2>/dev/null | awk '/(Cpu|%Cpu)/ {
+    for (i=1;i<=NF;i++) {
+      if ($i ~ /id/) {
+        gsub(/[^0-9.]/,"",$i)
+        if ($i != "") { printf "CPU|%.2f\n", 100-$i; exit }
+      }
+    }
+  }'
+fi
 "#;
 
 struct Client {
@@ -377,14 +407,57 @@ pub async fn run_command(profile: HostProfile, command: String) -> Result<Comman
         .map_err(|err| format!("{err:#}"))
 }
 
+static PREV_CPU_TICKS: std::sync::LazyLock<StdMutex<HashMap<String, (u64, u64, Instant)>>> =
+    std::sync::LazyLock::new(|| StdMutex::new(HashMap::new()));
+
 #[tauri::command]
 pub async fn collect_metrics(profile: HostProfile) -> Result<SystemSnapshot, String> {
     async move {
-        let started = Instant::now();
-        let command = format!("bash -lc {}", shell_single_quote(METRICS_SCRIPT));
+        // Concurrently measure real TCP connect latency (tcping) to the server's SSH port
+        let host = profile.host.clone();
+        let port = profile.port;
+        let tcp_ping_task = tokio::task::spawn_blocking(move || {
+            use std::net::{TcpStream, ToSocketAddrs};
+            let addr_str = if host.contains(':') && !host.starts_with('[') {
+                format!("[{}]:{}", host, port)
+            } else {
+                format!("{}:{}", host, port)
+            };
+            if let Ok(mut addrs) = addr_str.to_socket_addrs() {
+                if let Some(addr) = addrs.next() {
+                    let connect_start = Instant::now();
+                    if TcpStream::connect_timeout(&addr, Duration::from_millis(2000)).is_ok() {
+                        return Some(connect_start.elapsed().as_millis());
+                    }
+                }
+            }
+            None
+        });
+
+        let command = format!("sh -c {}", shell_single_quote(METRICS_SCRIPT));
         let output = exec_once(&profile, &command).await?;
-        let mut snapshot = parse_metrics(&output.stdout);
-        snapshot.latency_ms = Some(started.elapsed().as_millis());
+        let (mut snapshot, raw_ticks) = parse_metrics(&output.stdout);
+
+        // If CPU tick counters are available, compute accurate CPU usage over the polling interval
+        if let Some((idle_ticks, total_ticks)) = raw_ticks {
+            let mut prev_map = PREV_CPU_TICKS.lock().unwrap();
+            let now = Instant::now();
+            if let Some(&(prev_idle, prev_total, prev_time)) = prev_map.get(&profile.id) {
+                if now.duration_since(prev_time) <= Duration::from_secs(15) {
+                    let diff_total = total_ticks.saturating_sub(prev_total);
+                    let diff_idle = idle_ticks.saturating_sub(prev_idle);
+                    if diff_total > 0 {
+                        let busy = diff_total.saturating_sub(diff_idle);
+                        let pct = ((busy as f64 / diff_total as f64) * 100.0).clamp(0.0, 100.0) as f32;
+                        snapshot.cpu_percent = pct;
+                    }
+                }
+            }
+            prev_map.insert(profile.id.clone(), (idle_ticks, total_ticks, now));
+        }
+
+        let tcp_latency = tcp_ping_task.await.ok().flatten();
+        snapshot.latency_ms = tcp_latency;
         snapshot.collected_at = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         Ok(snapshot)
     }
@@ -992,28 +1065,43 @@ fn write_temp_private_key(label: &str, private_key: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn parse_metrics(output: &str) -> SystemSnapshot {
+fn parse_metrics(output: &str) -> (SystemSnapshot, Option<(u64, u64)>) {
     let mut snapshot = SystemSnapshot {
         collected_at: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         ..Default::default()
     };
+    let mut raw_ticks: Option<(u64, u64)> = None;
 
     for line in output.lines() {
         let parts: Vec<&str> = line.split('|').collect();
         match parts.as_slice() {
             ["OS", os] => snapshot.os = (*os).to_owned(),
             ["UPTIME", seconds] => {
-                snapshot.uptime_seconds = seconds.parse::<f64>().unwrap_or_default();
+                snapshot.uptime_seconds = seconds.replace(',', ".").parse::<f64>().unwrap_or_default();
             }
             ["LOAD", one, five, fifteen] => {
                 snapshot.load = [
-                    one.parse::<f32>().unwrap_or_default(),
-                    five.parse::<f32>().unwrap_or_default(),
-                    fifteen.parse::<f32>().unwrap_or_default(),
+                    one.replace(',', ".").parse::<f32>().unwrap_or_default(),
+                    five.replace(',', ".").parse::<f32>().unwrap_or_default(),
+                    fifteen.replace(',', ".").parse::<f32>().unwrap_or_default(),
                 ];
             }
             ["CPU", cpu] => {
-                snapshot.cpu_percent = cpu.parse::<f32>().unwrap_or_default().clamp(0.0, 100.0);
+                snapshot.cpu_percent = cpu.replace(',', ".").parse::<f32>().unwrap_or_default().clamp(0.0, 100.0);
+            }
+            ["CPUTICKS", u, n, s, i, w, q, sq, st] => {
+                let user: u64 = u.parse().unwrap_or_default();
+                let nice: u64 = n.parse().unwrap_or_default();
+                let system: u64 = s.parse().unwrap_or_default();
+                let idle: u64 = i.parse().unwrap_or_default();
+                let iowait: u64 = w.parse().unwrap_or_default();
+                let irq: u64 = q.parse().unwrap_or_default();
+                let softirq: u64 = sq.parse().unwrap_or_default();
+                let steal: u64 = st.parse().unwrap_or_default();
+
+                let total = user + nice + system + idle + iowait + irq + softirq + steal;
+                let idle_total = idle + iowait;
+                raw_ticks = Some((idle_total, total));
             }
             ["MEM", used, total] => {
                 snapshot.mem_used = parse_u64(used);
@@ -1035,14 +1123,14 @@ fn parse_metrics(output: &str) -> SystemSnapshot {
             }),
             ["PROC", rss, cpu, command] => snapshot.processes.push(ProcessInfo {
                 rss_kb: parse_u64(rss),
-                cpu_percent: cpu.parse::<f32>().unwrap_or_default(),
+                cpu_percent: cpu.replace(',', ".").parse::<f32>().unwrap_or_default(),
                 command: (*command).to_owned(),
             }),
             _ => {}
         }
     }
 
-    snapshot
+    (snapshot, raw_ticks)
 }
 
 fn parse_u64(value: &str) -> u64 {
@@ -1135,4 +1223,68 @@ fn now_ms() -> u128 {
         .duration_since(UNIX_EPOCH)
         .map(|value| value.as_millis())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_metrics_standard() {
+        let sample_output = "\
+OS|Debian GNU/Linux 12 (bookworm)
+UPTIME|6498000.50
+LOAD|0.02|0.01|0.00
+MEM|216494080|442572800
+SWAP|823296|1073741824
+CPU|28.50
+CPUTICKS|2255|34|2290|22625563|6290|127|456|0
+NET|eth0|311565549568|306272378880
+DISK|/|3972825088|21474836480
+PROC|38400|2.1|vps-studio
+";
+        let (snapshot, raw_ticks) = parse_metrics(sample_output);
+        assert_eq!(snapshot.os, "Debian GNU/Linux 12 (bookworm)");
+        assert!((snapshot.uptime_seconds - 6498000.50).abs() < 1e-4);
+        assert_eq!(snapshot.load, [0.02, 0.01, 0.00]);
+        assert_eq!(snapshot.mem_used, 216494080);
+        assert_eq!(snapshot.mem_total, 442572800);
+        assert!((snapshot.cpu_percent - 28.50).abs() < 1e-2);
+        assert!(raw_ticks.is_some());
+    }
+
+    #[test]
+    fn test_parse_metrics_with_commas() {
+        let comma_output = "\
+OS|Ubuntu 24.04 LTS
+UPTIME|12345,67
+LOAD|0,05|0,02|0,01
+CPU|14,25
+PROC|10240|1,5|bash
+";
+        let (snapshot, _) = parse_metrics(comma_output);
+        assert!((snapshot.uptime_seconds - 12345.67).abs() < 1e-2);
+        assert_eq!(snapshot.load, [0.05, 0.02, 0.01]);
+        assert!((snapshot.cpu_percent - 14.25).abs() < 1e-2);
+        assert_eq!(snapshot.processes.len(), 1);
+        assert!((snapshot.processes[0].cpu_percent - 1.5).abs() < 1e-2);
+    }
+
+    #[test]
+    fn test_cpu_ticks_delta_calculation() {
+        // T0: total = 1000, idle = 700
+        let (idle_0, total_0) = (700u64, 1000u64);
+        // T1: total = 1500 (+500 total), idle = 1060 (+360 idle)
+        // busy = 500 - 360 = 140 ticks -> 140 / 500 = 28.0% CPU!
+        let (idle_1, total_1) = (1060u64, 1500u64);
+
+        let diff_total = total_1.saturating_sub(total_0);
+        let diff_idle = idle_1.saturating_sub(idle_0);
+        assert_eq!(diff_total, 500);
+        assert_eq!(diff_idle, 360);
+
+        let busy = diff_total.saturating_sub(diff_idle);
+        let pct = ((busy as f64 / diff_total as f64) * 100.0).clamp(0.0, 100.0) as f32;
+        assert!((pct - 28.0).abs() < 1e-4);
+    }
 }
