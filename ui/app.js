@@ -4327,7 +4327,7 @@ function renderHostDetails() {
         <section class="details-card">
           <h3>${t("Address")}</h3>
           <div class="detail-row with-mark">
-            <div class="host-mark pink">${hostMarkIcon()}</div>
+            <div class="host-mark" style="background: ${osIcon(host.os).color};">${osIcon(host.os).svg}</div>
             <input id="editHost" value="${escapeAttr(host.host)}" placeholder="${t("Host or IP address")}" />
           </div>
         </section>

@@ -721,6 +721,42 @@ button:disabled {
   font-weight: 700;
 }
 
+.detail-row.with-mark {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.detail-row.with-mark input {
+  flex: 1;
+  min-width: 0;
+}
+
+.port-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.port-row strong {
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--md-sys-color-on-surface);
+}
+
+.port-row input {
+  width: 80px;
+  flex: 0 0 auto;
+  text-align: center;
+}
+
+.divider {
+  height: 1px;
+  margin: 14px 0;
+  background: var(--md-sys-color-outline-variant);
+}
+
 .detail-field {
   margin-bottom: 14px;
 }
