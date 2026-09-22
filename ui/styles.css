@@ -471,7 +471,7 @@ button:disabled {
   position: relative;
   display: inline-flex;
   border-radius: var(--md-sys-shape-corner-full);
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
@@ -487,6 +487,12 @@ button:disabled {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
   border-left: 1px solid rgba(6, 46, 111, 0.25);
+}
+
+.split > .dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
 }
 
 /* ==========================================================================
