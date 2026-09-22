@@ -3133,7 +3133,7 @@ function renderHostsPage() {
     <div class="toolstrip">
       <div class="split">
         <button class="btn primary" data-action="new-host">${t("New host")}</button>
-        <button class="btn primary square" data-action="toggle-host-menu" title="${t("More options")}">${chevronDownIcon(state.hostMenuOpen)}</button>
+        <button class="btn square" data-action="toggle-host-menu" title="${t("More options")}">${chevronDownIcon(state.hostMenuOpen)}</button>
         ${state.hostMenuOpen ? renderHostMenu() : ""}
       </div>
       <button class="btn ghost strong" data-action="local-terminal">${t("Terminal")}</button>
@@ -3440,7 +3440,7 @@ function renderKeychainPage() {
     <div class="toolstrip first">
       <div class="split">
         <button class="btn primary" data-action="new-key">${t("New key")}</button>
-        <button class="btn primary square" data-action="toggle-key-menu" title="${t("More options")}">${chevronDownIcon(state.keyMenuOpen)}</button>
+        <button class="btn square" data-action="toggle-key-menu" title="${t("More options")}">${chevronDownIcon(state.keyMenuOpen)}</button>
         ${state.keyMenuOpen ? renderKeyMenu() : ""}
       </div>
       ${renderToolstripRight(true)}
