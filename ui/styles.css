@@ -746,8 +746,8 @@ button:disabled {
 }
 
 .port-row input {
-  width: 80px;
-  flex: 0 0 auto;
+  width: 80px !important;
+  flex: 0 0 80px;
   text-align: center;
 }
 
@@ -916,7 +916,7 @@ button:disabled {
 
 .toggle span::after {
   position: absolute;
-  top: 6px;
+  top: 8px;
   left: 6px;
   width: 16px;
   height: 16px;
@@ -936,7 +936,7 @@ button:disabled {
   background: var(--md-sys-color-on-primary);
   width: 20px;
   height: 20px;
-  top: 4px;
+  top: 6px;
   left: 4px;
 }
 
