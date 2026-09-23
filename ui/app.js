@@ -33,14 +33,6 @@ const state = {
   sftpAnchor: null,
   terminal: "",
   term: null,
-  localLine: {
-    prompt: "",
-    buffer: "",
-    cursor: 0,
-    history: [],
-    historyIndex: null,
-    draft: "",
-  },
   commandInput: "",
   watchedFiles: [],
   editorOpen: false,
@@ -1693,7 +1685,6 @@ async function openLocalPowershell() {
   state.remoteEntries = [];
   closeMenus();
   render({ terminalBottom: true, focusTerminal: true });
-  resetLocalLine(true);
   terminalReset(terminalColumns(), terminalRows());
   appendTerminalOutput(`[vps-studio] opening local ${termName}...\r\n`);
 
@@ -1848,7 +1839,10 @@ function appendTerminalOutput(text) {
     render({ focusTerminal: true });
   }
   terminalWrite(text);
-  updateLocalPromptFromTerminal();
+  if (state.sessionKind === "local" && String(text || "").includes("[process exited]")) {
+    state.shellHealthy = false;
+    setStatus(t("Local terminal closed"));
+  }
 }
 
 function startShellPolling() {
@@ -1935,247 +1929,7 @@ function normalizeShellInput(data) {
 }
 
 function handleTerminalData(data) {
-  if (state.sessionKind === "local") {
-    handleLocalTerminalData(String(data || ""));
-    return;
-  }
   sendShellInput(data);
-}
-
-function resetLocalLine(keepHistory = true) {
-  const history = keepHistory && state.localLine ? state.localLine.history : [];
-  state.localLine = {
-    prompt: "",
-    buffer: "",
-    cursor: 0,
-    history,
-    historyIndex: null,
-    draft: "",
-  };
-}
-
-function updateLocalPromptFromTerminal() {
-  if (state.sessionKind !== "local") return;
-  const plain = String(state.terminal || "").replace(/\r/g, "");
-  const lastLine = plain.split("\n").pop() || "";
-  if (!/^PS .+>\s*$/.test(lastLine)) return;
-  state.localLine.prompt = lastLine.endsWith(" ") ? lastLine : `${lastLine} `;
-  state.localLine.buffer = "";
-  state.localLine.cursor = 0;
-  state.localLine.historyIndex = null;
-  state.localLine.draft = "";
-}
-
-function handleLocalTerminalData(data) {
-  for (let index = 0; index < data.length; ) {
-    if (data.startsWith("\x1b[3~", index)) {
-      localLineDelete();
-      index += 4;
-      continue;
-    }
-    if (data.startsWith("\x1b[A", index)) {
-      localLineHistory(-1);
-      index += 3;
-      continue;
-    }
-    if (data.startsWith("\x1b[B", index)) {
-      localLineHistory(1);
-      index += 3;
-      continue;
-    }
-    if (data.startsWith("\x1b[C", index)) {
-      localLineMove(1);
-      index += 3;
-      continue;
-    }
-    if (data.startsWith("\x1b[D", index)) {
-      localLineMove(-1);
-      index += 3;
-      continue;
-    }
-    if (data.startsWith("\x1b[H", index) || data.startsWith("\x1bOH", index)) {
-      localLineHome();
-      index += data.startsWith("\x1b[H", index) ? 3 : 3;
-      continue;
-    }
-    if (data.startsWith("\x1b[F", index) || data.startsWith("\x1bOF", index)) {
-      localLineEnd();
-      index += data.startsWith("\x1b[F", index) ? 3 : 3;
-      continue;
-    }
-
-    const ch = data[index];
-    if (ch === "\r" || ch === "\n") {
-      localLineSubmit();
-    } else if (ch === "\x7f" || ch === "\x08") {
-      localLineBackspace();
-    } else if (ch === "\x03") {
-      localLineInterrupt();
-    } else if (ch === "\t") {
-      localLineInsert("    ");
-    } else if (ch >= " ") {
-      localLineInsert(ch);
-    }
-    index += 1;
-  }
-}
-
-function localLineInsert(text) {
-  if (!text) return;
-  const line = state.localLine;
-  line.buffer = `${line.buffer.slice(0, line.cursor)}${text}${line.buffer.slice(line.cursor)}`;
-  line.cursor += text.length;
-  line.historyIndex = null;
-  renderLocalLine();
-}
-
-function localLineBackspace() {
-  const line = state.localLine;
-  if (line.cursor <= 0) return;
-  line.buffer = `${line.buffer.slice(0, line.cursor - 1)}${line.buffer.slice(line.cursor)}`;
-  line.cursor -= 1;
-  line.historyIndex = null;
-  renderLocalLine();
-}
-
-function localLineDelete() {
-  const line = state.localLine;
-  if (line.cursor >= line.buffer.length) return;
-  line.buffer = `${line.buffer.slice(0, line.cursor)}${line.buffer.slice(line.cursor + 1)}`;
-  line.historyIndex = null;
-  renderLocalLine();
-}
-
-function localLineMove(delta) {
-  const line = state.localLine;
-  line.cursor = Math.max(0, Math.min(line.buffer.length, line.cursor + delta));
-  renderLocalLine();
-}
-
-function localLineHome() {
-  state.localLine.cursor = 0;
-  renderLocalLine();
-}
-
-function localLineEnd() {
-  state.localLine.cursor = state.localLine.buffer.length;
-  renderLocalLine();
-}
-
-function localLineHistory(delta) {
-  const line = state.localLine;
-  if (!line.history.length) return;
-  if (delta < 0) {
-    if (line.historyIndex === null) {
-      line.draft = line.buffer;
-      line.historyIndex = line.history.length - 1;
-    } else {
-      line.historyIndex = Math.max(0, line.historyIndex - 1);
-    }
-  } else if (line.historyIndex !== null) {
-    if (line.historyIndex < line.history.length - 1) {
-      line.historyIndex += 1;
-    } else {
-      line.historyIndex = null;
-      line.buffer = line.draft;
-      line.cursor = line.buffer.length;
-      renderLocalLine();
-      return;
-    }
-  }
-
-  if (line.historyIndex !== null) {
-    line.buffer = line.history[line.historyIndex] || "";
-    line.cursor = line.buffer.length;
-    renderLocalLine();
-  }
-}
-
-function localLineSubmit() {
-  const line = state.localLine;
-  const command = line.buffer;
-  if (command.trim() && line.history[line.history.length - 1] !== command) {
-    line.history.push(command);
-    if (line.history.length > 200) line.history.shift();
-  }
-  if (xterm) xterm.write("\r\x1b[K");
-  line.buffer = "";
-  line.cursor = 0;
-  line.historyIndex = null;
-  line.draft = "";
-  sendShellInput(`${command}\r`);
-}
-
-function localLineInterrupt() {
-  const line = state.localLine;
-  line.buffer = "";
-  line.cursor = 0;
-  line.historyIndex = null;
-  line.draft = "";
-  if (xterm) xterm.write("^C\r\n");
-  sendShellInput("\x03");
-}
-
-function renderLocalLine() {
-  if (!xterm || state.sessionKind !== "local") return;
-  const line = state.localLine;
-  const prompt = line.prompt || "";
-  xterm.write(`\r${prompt}${line.buffer}\x1b[K`);
-  const left = line.buffer.length - line.cursor;
-  if (left > 0) xterm.write(`\x1b[${left}D`);
-}
-
-function handleTerminalKeydown(event) {
-  if (!state.activeShellId) return;
-  if (state.sessionKind === "local") return;
-  const data = keyToTerminalData(event);
-  if (data === null) return;
-  event.preventDefault();
-  sendShellInput(data);
-}
-
-function keyToTerminalData(event) {
-  if (event.ctrlKey && event.key.length === 1) {
-    const key = event.key.toUpperCase();
-    const code = key.charCodeAt(0);
-    if (code >= 64 && code <= 95) return String.fromCharCode(code - 64);
-    if (event.key === " ") return "\x00";
-  }
-  if (event.altKey && event.key.length === 1 && !event.ctrlKey && !event.metaKey) return `\x1b${event.key}`;
-  const cursorPrefix = state.term?.applicationCursor ? "\x1bO" : "\x1b[";
-  if (event.key === "Enter") return "\r";
-  if (event.key === "Backspace") return state.sessionKind === "local" ? "\x08" : "\x7f";
-  if (event.key === "Tab") return "\t";
-  if (event.key === "Escape") return "\x1b";
-  if (event.key === "ArrowUp") return `${cursorPrefix}A`;
-  if (event.key === "ArrowDown") return `${cursorPrefix}B`;
-  if (event.key === "ArrowRight") return `${cursorPrefix}C`;
-  if (event.key === "ArrowLeft") return `${cursorPrefix}D`;
-  if (event.key === "Home") return "\x1b[H";
-  if (event.key === "End") return "\x1b[F";
-  if (event.key === "Delete") return state.sessionKind === "local" ? "\x08" : "\x1b[3~";
-  if (event.key === "Insert") return "\x1b[2~";
-  if (event.key === "PageUp") return "\x1b[5~";
-  if (event.key === "PageDown") return "\x1b[6~";
-  if (/^F\d{1,2}$/.test(event.key)) {
-    const map = {
-      F1: "\x1bOP",
-      F2: "\x1bOQ",
-      F3: "\x1bOR",
-      F4: "\x1bOS",
-      F5: "\x1b[15~",
-      F6: "\x1b[17~",
-      F7: "\x1b[18~",
-      F8: "\x1b[19~",
-      F9: "\x1b[20~",
-      F10: "\x1b[21~",
-      F11: "\x1b[23~",
-      F12: "\x1b[24~",
-    };
-    return map[event.key] || null;
-  }
-  if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) return event.key;
-  return null;
 }
 
 function createTerminalState(cols = 120, rows = 32) {
@@ -2212,6 +1966,21 @@ function isMacOS() {
   );
 }
 
+function isWindows() {
+  return typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
+}
+
+// Keep the shell's idea of the terminal size in sync (local PTY or SSH channel),
+// so full-screen programs like vim or top use the whole pane.
+let resizeShellTimer = null;
+function scheduleShellResize(cols, rows) {
+  clearTimeout(resizeShellTimer);
+  resizeShellTimer = setTimeout(() => {
+    if (!state.activeShellId || !invoke) return;
+    invoke("resize_shell", { sessionId: state.activeShellId, cols, rows }).catch(() => {});
+  }, 80);
+}
+
 function ensureXterm() {
   if (xterm || !window.Terminal || !window.FitAddon?.FitAddon) return xterm;
   const isMac = isMacOS();
@@ -2223,7 +1992,6 @@ function ensureXterm() {
     fontWeight: 700,
     lineHeight: 1.1,
     scrollback: 8000,
-    windowsMode: !isMac,
     theme: {
       background: "#000000",
       foreground: "#ffffff",
@@ -2250,6 +2018,7 @@ function ensureXterm() {
   xtermFit = new window.FitAddon.FitAddon();
   xterm.loadAddon(xtermFit);
   xtermDataDisposable = xterm.onData((data) => handleTerminalData(data));
+  xterm.onResize(({ cols, rows }) => scheduleShellResize(cols, rows));
   return xterm;
 }
 
@@ -2336,7 +2105,9 @@ function terminalReset(cols = terminalColumns(), rows = terminalRows()) {
   }
   state.term = null;
   state.terminal = "";
-  if (state.sessionKind === "local") resetLocalLine(true);
+  // Tell xterm when it talks to Windows ConPTY so line wrapping and reflow
+  // match what ConPTY sends; SSH sessions talk to a Unix PTY.
+  if (xterm) xterm.options.windowsPty = state.sessionKind === "local" && isWindows() ? { backend: "conpty" } : {};
 }
 
 function ensureTerminal() {

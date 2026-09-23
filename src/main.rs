@@ -6,7 +6,7 @@ mod models;
 
 use backend::{
     check_watched_files, chmod_remote, collect_metrics, create_remote_folder, delete_remote, generate_ssh_key,
-    list_remote_dir, open_remote_file, read_clipboard_text, read_shell, rename_remote, run_command,
+    list_remote_dir, open_remote_file, read_clipboard_text, read_shell, rename_remote, resize_shell, run_command,
     start_local_shell, start_shell, stop_shell, test_connection, upload_edited_file,
     write_clipboard_text, write_shell, ShellStore,
 };
@@ -40,7 +40,8 @@ fn main() {
             read_clipboard_text,
             write_clipboard_text,
             rename_remote,
-            chmod_remote
+            chmod_remote,
+            resize_shell
         ])
         .run(tauri::generate_context!())
         .expect("error while running VPS Studio");

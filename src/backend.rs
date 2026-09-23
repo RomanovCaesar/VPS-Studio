@@ -16,19 +16,14 @@ use ssh_key::{Algorithm, EcdsaCurve, LineEnding, PrivateKey as SshPrivateKey};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::Command;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use tauri::Emitter;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex as TokioMutex;
 use tokio::time::timeout;
-
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
-
-#[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 const METRICS_SCRIPT: &str = r#"
 export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -129,9 +124,13 @@ struct RemoteShell {
     writer: ChannelWriteHalf<client::Msg>,
 }
 
+/// Local shell running inside a real pseudo-terminal (ConPTY on Windows,
+/// a Unix PTY on macOS/Linux), so it behaves exactly like a terminal emulator:
+/// its own prompt and line editing, Ctrl+C, full-screen programs, resizing.
 struct LocalShell {
-    child: Child,
-    stdin: StdMutex<ChildStdin>,
+    child: StdMutex<Box<dyn portable_pty::Child + Send + Sync>>,
+    master: StdMutex<Box<dyn MasterPty + Send>>,
+    writer: StdMutex<Box<dyn Write + Send>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -374,14 +373,51 @@ pub async fn write_shell(
                     .context("send input to remote shell")?;
             }
             ActiveShellKind::Local(local) => {
-                let mut stdin = local
-                    .stdin
+                let mut writer = local
+                    .writer
                     .lock()
                     .map_err(|_| anyhow::anyhow!("local shell input lock is poisoned"))?;
-                stdin
+                writer
                     .write_all(data.as_bytes())
                     .context("send input to local shell")?;
-                stdin.flush().context("flush local shell input")?;
+                writer.flush().context("flush local shell input")?;
+            }
+        }
+        Ok(())
+    }
+    .await
+    .map_err(|err: anyhow::Error| format!("{err:#}"))
+}
+
+/// Tell the shell its terminal size changed (local PTY or remote SSH channel).
+#[tauri::command]
+pub async fn resize_shell(
+    store: tauri::State<'_, ShellStore>,
+    session_id: String,
+    cols: u32,
+    rows: u32,
+) -> Result<(), String> {
+    async move {
+        let (cols, rows) = (cols.clamp(2, 1000), rows.clamp(2, 1000));
+        let sessions = store.sessions.lock().await;
+        let Some(shell) = sessions.get(&session_id) else {
+            return Ok(());
+        };
+        match &shell.kind {
+            ActiveShellKind::Remote(remote) => {
+                remote
+                    .writer
+                    .window_change(cols, rows, 0, 0)
+                    .await
+                    .context("resize remote terminal")?;
+            }
+            ActiveShellKind::Local(local) => {
+                local
+                    .master
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("local terminal lock is poisoned"))?
+                    .resize(pty_size(cols, rows))
+                    .context("resize local terminal")?;
             }
         }
         Ok(())
@@ -785,33 +821,33 @@ pub async fn start_local_shell(
         let session_id = "local-terminal".to_owned();
         stop_shell_inner(&store, &session_id).await?;
 
-        let mut child = spawn_local_shell(cols.unwrap_or(120), rows.unwrap_or(36))?;
-        let stdin = child.stdin.take().context("open local shell stdin")?;
-        let stdout = child
-            .stdout
-            .take()
-            .context("open local shell stdout")?;
-        let stderr = child
-            .stderr
-            .take()
-            .context("open local shell stderr")?;
+        let pty = native_pty_system()
+            .openpty(pty_size(cols.unwrap_or(120), rows.unwrap_or(36)))
+            .map_err(|err| anyhow::anyhow!("open local terminal: {err}"))?;
+        let child = spawn_local_shell(pty.slave.as_ref())?;
+        // The slave end belongs to the shell now; keeping it open would stop
+        // the reader from ever seeing end-of-file when the shell exits.
+        drop(pty.slave);
+        let reader = pty
+            .master
+            .try_clone_reader()
+            .map_err(|err| anyhow::anyhow!("read local terminal: {err}"))?;
+        let writer = pty
+            .master
+            .take_writer()
+            .map_err(|err| anyhow::anyhow!("write local terminal: {err}"))?;
 
         let output = Arc::new(StdMutex::new(String::new()));
-        spawn_local_reader(
-            stdout,
-            Arc::clone(&output),
-            window.clone(),
-            session_id.clone(),
-        );
-        spawn_local_reader(stderr, Arc::clone(&output), window, session_id.clone());
+        spawn_local_reader(reader, Arc::clone(&output), window, session_id.clone());
 
         store.sessions.lock().await.insert(
             session_id,
             ActiveShell {
                 output,
                 kind: ActiveShellKind::Local(LocalShell {
-                    child,
-                    stdin: StdMutex::new(stdin),
+                    child: StdMutex::new(child),
+                    master: StdMutex::new(pty.master),
+                    writer: StdMutex::new(writer),
                 }),
             },
         );
@@ -861,85 +897,101 @@ async fn stop_shell_inner(store: &ShellStore, session_id: &str) -> Result<()> {
                     .disconnect(Disconnect::ByApplication, "", "English")
                     .await;
             }
-            ActiveShellKind::Local(mut local) => {
-                let _ = local.child.kill();
-                let _ = local.child.wait();
+            ActiveShellKind::Local(local) => {
+                if let Ok(mut child) = local.child.lock() {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
             }
         }
     }
     Ok(())
 }
 
-fn spawn_local_shell(_cols: u32, _rows: u32) -> Result<Child> {
-    #[cfg(windows)]
-    {
-        let mut last_error = None;
-        for program in ["powershell.exe", "pwsh.exe", "cmd.exe"] {
-            let mut command = Command::new(program);
-            if program.contains("powershell") || program.contains("pwsh") {
-                command.args([
-                    "-NoLogo",
-                    "-NoExit",
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-Command",
-                    "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new(); [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new();",
-                ]);
-            }
-            command
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
-
-            if let Some(home_dir) = dirs::home_dir() {
-                command.current_dir(home_dir);
-            }
-
-            command.creation_flags(CREATE_NO_WINDOW);
-
-            match command.spawn() {
-                Ok(child) => return Ok(child),
-                Err(err) => last_error = Some(err),
-            }
-        }
-
-        match last_error {
-            Some(err) => bail!("start local shell failed: {err}"),
-            None => bail!("start local shell failed"),
-        }
-    }
-
-    #[cfg(not(windows))]
-    {
-        let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-        let candidates = [user_shell.as_str(), "/bin/zsh", "/bin/bash", "/bin/sh"];
-        let mut last_error = None;
-        for program in candidates {
-            let mut command = Command::new(program);
-            command
-                .arg("-l")
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
-
-            if let Some(home_dir) = dirs::home_dir() {
-                command.current_dir(home_dir);
-            }
-
-            match command.spawn() {
-                Ok(child) => return Ok(child),
-                Err(err) => last_error = Some(err),
-            }
-        }
-
-        match last_error {
-            Some(err) => bail!("start local shell failed: {err}"),
-            None => bail!("start local shell failed"),
-        }
+fn pty_size(cols: u32, rows: u32) -> PtySize {
+    PtySize {
+        rows: rows.min(u16::MAX as u32) as u16,
+        cols: cols.min(u16::MAX as u32) as u16,
+        pixel_width: 0,
+        pixel_height: 0,
     }
 }
 
+/// Start the user's shell attached to the pseudo-terminal, trying fallbacks
+/// in order until one starts.
+fn spawn_local_shell(
+    slave: &dyn portable_pty::SlavePty,
+) -> Result<Box<dyn portable_pty::Child + Send + Sync>> {
+    // cfg!() rather than #[cfg] so both branches are type-checked on every
+    // platform (the macOS path cannot be cross-compiled from Windows).
+    let candidates: Vec<(String, Vec<&str>)> = if cfg!(windows) {
+        let powershell_args = vec![
+            "-NoLogo",
+            "-NoExit",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "[Console]::InputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()",
+        ];
+        vec![
+            ("powershell.exe".to_owned(), powershell_args.clone()),
+            ("pwsh.exe".to_owned(), powershell_args),
+            ("cmd.exe".to_owned(), vec![]),
+        ]
+    } else {
+        let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_owned());
+        [user_shell.as_str(), "/bin/zsh", "/bin/bash", "/bin/sh"]
+            .into_iter()
+            .map(|shell| (shell.to_owned(), vec!["-l"]))
+            .collect()
+    };
+
+    // Child processes inherit "ignore Ctrl+C" from us. If VPS Studio was
+    // started by something that set it, Ctrl+C in the terminal would never
+    // stop a running command. Clear it so the shell always gets Ctrl+C.
+    #[cfg(windows)]
+    {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn SetConsoleCtrlHandler(
+                handler: Option<unsafe extern "system" fn(u32) -> i32>,
+                add: i32,
+            ) -> i32;
+        }
+        // SAFETY: a NULL handler with add=FALSE only resets the process's
+        // ignore-Ctrl+C flag; no callback is registered.
+        unsafe {
+            SetConsoleCtrlHandler(None, 0);
+        }
+    }
+
+    let mut last_error = None;
+    for (program, args) in candidates {
+        let mut command = CommandBuilder::new(&program);
+        command.args(&args);
+        command.env("TERM", "xterm-256color");
+        command.env("COLORTERM", "truecolor");
+        // Apps started from Finder/Dock get no locale; without one zsh and
+        // most tools fall back to ASCII and garble non-English text.
+        if !cfg!(windows) && std::env::var_os("LANG").is_none() && std::env::var_os("LC_ALL").is_none() {
+            command.env("LANG", "en_US.UTF-8");
+        }
+        if let Some(home_dir) = dirs::home_dir() {
+            command.cwd(home_dir);
+        }
+        match slave.spawn_command(command) {
+            Ok(child) => return Ok(child),
+            Err(err) => last_error = Some(format!("{program}: {err}")),
+        }
+    }
+    bail!(
+        "start local shell failed: {}",
+        last_error.unwrap_or_else(|| "no shell found".to_owned())
+    )
+}
+
+/// Forward terminal output to the UI. Bytes are decoded incrementally so a
+/// multi-byte UTF-8 character split across two reads is not garbled.
 fn spawn_local_reader<R>(
     mut reader: R,
     output: Arc<StdMutex<String>>,
@@ -949,33 +1001,66 @@ fn spawn_local_reader<R>(
     R: Read + Send + 'static,
 {
     std::thread::spawn(move || {
-        let mut buffer = [0_u8; 4096];
+        let emit = |text: String| {
+            push_shell_output(&output, &text);
+            let _ = window.emit(
+                "ssh-output",
+                TerminalPayload {
+                    session_id: session_id.clone(),
+                    data: text,
+                },
+            );
+        };
+        let mut buffer = [0_u8; 8192];
+        let mut pending: Vec<u8> = Vec::new();
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) => break,
                 Ok(len) => {
-                    let text = String::from_utf8_lossy(&buffer[..len])
-                        .replace('\u{0008}', "\u{0008} \u{0008}");
-                    push_shell_output(&output, &text);
-                    let payload = TerminalPayload {
-                        session_id: session_id.clone(),
-                        data: text,
-                    };
-                    let _ = window.emit("ssh-output", payload);
+                    pending.extend_from_slice(&buffer[..len]);
+                    let text = take_utf8_prefix(&mut pending);
+                    if !text.is_empty() {
+                        emit(text);
+                    }
                 }
                 Err(err) => {
-                    let text = format!("\r\n[local terminal read failed: {err}]\r\n");
-                    push_shell_output(&output, &text);
-                    let payload = TerminalPayload {
-                        session_id: session_id.clone(),
-                        data: text,
-                    };
-                    let _ = window.emit("ssh-output", payload);
+                    // EIO is how a Unix PTY reports that the shell has exited.
+                    if err.raw_os_error() != Some(5) {
+                        emit(format!("\r\n[local terminal read failed: {err}]\r\n"));
+                    }
                     break;
                 }
             }
         }
+        if !pending.is_empty() {
+            emit(String::from_utf8_lossy(&pending).into_owned());
+        }
+        emit("\r\n[process exited]\r\n".to_owned());
     });
+}
+
+/// Split off the longest valid UTF-8 prefix, keeping an incomplete trailing
+/// character in `pending` for the next read. Invalid bytes become U+FFFD.
+fn take_utf8_prefix(pending: &mut Vec<u8>) -> String {
+    match std::str::from_utf8(pending) {
+        Ok(text) => {
+            let text = text.to_owned();
+            pending.clear();
+            text
+        }
+        Err(err) => {
+            let valid = err.valid_up_to();
+            let cut = match err.error_len() {
+                // Incomplete character at the end: wait for more bytes.
+                None => valid,
+                // Genuinely invalid bytes: decode them lossily now.
+                Some(bad) => valid + bad,
+            };
+            let text = String::from_utf8_lossy(&pending[..cut]).into_owned();
+            pending.drain(..cut);
+            text
+        }
+    }
 }
 
 async fn connect_authenticated(profile: &HostProfile) -> Result<client::Handle<Client>> {
@@ -1392,6 +1477,110 @@ PROC|10240|1,5|bash
         assert!((snapshot.cpu_percent - 14.25).abs() < 1e-2);
         assert_eq!(snapshot.processes.len(), 1);
         assert!((snapshot.processes[0].cpu_percent - 1.5).abs() < 1e-2);
+    }
+
+    /// Runs the real local shell inside a PTY. Ignored by default because it
+    /// needs PowerShell / zsh installed: `cargo test -- --ignored local_shell_pty`
+    #[test]
+    #[ignore]
+    fn local_shell_pty_runs_commands_and_resizes() {
+        use std::io::{Read, Write};
+        let pty = native_pty_system().openpty(pty_size(100, 30)).expect("open pty");
+        let mut child = spawn_local_shell(pty.slave.as_ref()).expect("spawn shell");
+        drop(pty.slave);
+        let mut reader = pty.master.try_clone_reader().expect("reader");
+        let writer = pty.master.take_writer().expect("writer");
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            while let Ok(n) = reader.read(&mut buf) {
+                if n == 0 || tx.send(buf[..n].to_vec()).is_err() {
+                    break;
+                }
+            }
+        });
+        // ConPTY asks for the cursor position (ESC[6n) before starting the
+        // shell; xterm.js answers this in the app, so answer it here too.
+        let writer = std::sync::Arc::new(std::sync::Mutex::new(writer));
+        let answer = {
+            let writer = std::sync::Arc::clone(&writer);
+            move |chunk: &[u8]| {
+                if chunk.windows(4).any(|w| w == b"\x1b[6n") {
+                    let mut w = writer.lock().unwrap();
+                    let _ = w.write_all(b"\x1b[1;1R");
+                    let _ = w.flush();
+                }
+            }
+        };
+        let mut seen = Vec::new();
+        let mut wait_for = |needle: &str, secs: u64| -> String {
+            let deadline = Instant::now() + Duration::from_secs(secs);
+            while Instant::now() < deadline {
+                if let Ok(chunk) = rx.recv_timeout(Duration::from_millis(200)) {
+                    answer(&chunk);
+                    seen.extend(chunk);
+                }
+                let text = String::from_utf8_lossy(&seen).into_owned();
+                if text.contains(needle) {
+                    return text;
+                }
+            }
+            panic!("timed out waiting for {needle:?}; got:\n{}", String::from_utf8_lossy(&seen));
+        };
+
+        // Enter is "\r" from xterm; a real PTY turns it into a line ending.
+        #[cfg(windows)]
+        let (echo, size) = ("Write-Output ('pty' + 'ok 你好')\r", "Write-Output (\"size=\" + $Host.UI.RawUI.WindowSize.Width)\r");
+        #[cfg(not(windows))]
+        let (echo, size) = ("echo \"pty\"\"ok 你好\"\r", "echo size=$(tput cols)\r");
+        let send = |data: &[u8]| {
+            let mut w = writer.lock().unwrap();
+            w.write_all(data).unwrap();
+            w.flush().unwrap();
+        };
+        send(echo.as_bytes());
+        wait_for("ptyok 你好", 20);
+
+        pty.master.resize(pty_size(132, 40)).expect("resize");
+        std::thread::sleep(Duration::from_millis(300));
+        send(size.as_bytes());
+        wait_for("size=132", 20);
+
+        // Ctrl+C must reach the shell as an interrupt, and the shell keeps running.
+        #[cfg(windows)]
+        let (sleep, after) = ("Start-Sleep -Seconds 30\r", "Write-Output ('after' + 'ctrlc')\r");
+        #[cfg(not(windows))]
+        let (sleep, after) = ("sleep 30\r", "echo \"after\"\"ctrlc\"\r");
+        send(sleep.as_bytes());
+        std::thread::sleep(Duration::from_millis(800));
+        let started = Instant::now();
+        send(b"\x03");
+        std::thread::sleep(Duration::from_millis(500));
+        send(after.as_bytes());
+        wait_for("afterctrlc", 10);
+        assert!(started.elapsed() < Duration::from_secs(10), "Ctrl+C did not interrupt");
+
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn test_take_utf8_prefix_keeps_split_character() {
+        // "你" is E4 BD A0; deliver it split across two reads.
+        let mut pending = b"ab\xE4\xBD".to_vec();
+        assert_eq!(take_utf8_prefix(&mut pending), "ab");
+        assert_eq!(pending, b"\xE4\xBD");
+        pending.push(0xA0);
+        assert_eq!(take_utf8_prefix(&mut pending), "你");
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn test_take_utf8_prefix_replaces_invalid_bytes() {
+        let mut pending = b"a\xFFb".to_vec();
+        assert_eq!(take_utf8_prefix(&mut pending), "a\u{FFFD}");
+        assert_eq!(take_utf8_prefix(&mut pending), "b");
     }
 
     #[test]
