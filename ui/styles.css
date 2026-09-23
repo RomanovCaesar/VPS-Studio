@@ -1422,7 +1422,7 @@ tr:hover td {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  min-width: 130px;
+  min-width: 180px;
   z-index: 1000;
   box-shadow: var(--md-sys-elevation-2);
   animation: tactile-menu-in 100ms var(--md-sys-motion-standard);
@@ -1450,6 +1450,7 @@ tr:hover td {
   font-size: 13px;
   font-weight: 600;
   text-align: left;
+  white-space: nowrap;
   border: none;
   cursor: default;
   transition: background 120ms ease;
