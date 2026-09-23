@@ -458,6 +458,7 @@ async function call(command, args = {}) {
 
 function init() {
   document.addEventListener("click", handleGlobalClick);
+  bindComboEvents();
   state.hosts = [emptyHost()];
   state.selectedHostId = state.hosts[0].id;
   state.status = "Loading hosts...";
@@ -669,29 +670,300 @@ function profileForConnection(host) {
   return profile;
 }
 
-function keyOptions(selectedId) {
-  if (!state.keys.length) return `<option value="">No keys saved</option>`;
-  const selected = selectedId || state.keys[0]?.id || "";
-  return state.keys
-    .map(
-      (key) => `
-        <option value="${escapeAttr(key.id)}" ${key.id === selected ? "selected" : ""}>
-          ${escapeHtml(keyLabel(key))}
-        </option>
-      `,
-    )
-    .join("");
-}
-
 function renderKeySelect(id, auth, attrs = "") {
   const current = normalizeAuth(auth);
   const selectedId = current.kind === "keyRef" ? current.keyId : "";
+  const selected = selectedId || state.keys[0]?.id || "";
+  const options = state.keys.map((key) => ({ value: key.id, label: keyLabel(key) }));
   return `
     <div class="detail-field">
       <label>${t("Key")}</label>
-      <select id="${id}" ${attrs}>${keyOptions(selectedId)}</select>
+      ${renderMdSelect(id, options, selected, {
+        disabled: /\bdisabled\b/.test(attrs),
+        placeholder: t("No keys saved"),
+        icon: keySmallIcon(),
+      })}
     </div>
   `;
+}
+
+/* --------------------------------------------------------------------------
+   MD3 menus replacing native <select> / <datalist>.
+   The popup lives on <body> (position: fixed) so scroll containers never clip
+   it, and it re-anchors by id after each render().
+   -------------------------------------------------------------------------- */
+function chevronDownIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
+}
+
+// Read-only dropdown: a hidden input holds the value, a button shows the label.
+function renderMdSelect(id, options, selected, { disabled = false, placeholder = "", icon = "", compact = false, action = "" } = {}) {
+  const current = options.find((option) => option.value === selected) || null;
+  const isDisabled = disabled || !options.length;
+  return `
+    <div class="md-combo md-select ${compact ? "compact" : ""} ${isDisabled ? "disabled" : ""}" data-combo-for="${escapeAttr(id)}" data-combo-mode="select" data-options="${escapeAttr(JSON.stringify(options))}">
+      <input type="hidden" id="${escapeAttr(id)}" value="${escapeAttr(current ? current.value : "")}" ${action ? `data-combo-action="${escapeAttr(action)}"` : ""} />
+      <button type="button" class="md-combo-trigger" id="${escapeAttr(id)}__trigger" ${isDisabled ? "disabled" : ""}>
+        ${icon ? `<span class="md-combo-lead">${icon}</span>` : ""}
+        <span class="md-combo-label truncate-text ${current ? "" : "placeholder"}">${escapeHtml(current ? current.label : placeholder)}</span>
+        <span class="md-combo-chevron">${chevronDownIcon()}</span>
+      </button>
+    </div>
+  `;
+}
+
+// Editable combobox with filtered suggestions (Termius-style group picker).
+function renderMdCombo(id, options, currentValue, { placeholder = "", icon = "" } = {}) {
+  return `
+    <div class="md-combo md-combobox ${currentValue ? "has-value" : ""}" data-combo-for="${escapeAttr(id)}" data-combo-mode="combo" data-options="${escapeAttr(JSON.stringify(options))}">
+      ${icon ? `<span class="md-combo-lead">${icon}</span>` : ""}
+      <input id="${escapeAttr(id)}" class="md-combo-input" value="${escapeAttr(currentValue || "")}" placeholder="${escapeAttr(placeholder)}" autocomplete="off" spellcheck="false" />
+      <button type="button" class="md-combo-clear" tabindex="-1" title="${t("Clear")}">${closeIcon()}</button>
+      <span class="md-combo-chevron">${chevronDownIcon()}</span>
+    </div>
+  `;
+}
+
+let activeCombo = null; // { id, highlight }
+let comboMenuEl = null;
+
+function comboRoot(id) {
+  return document.querySelector(`.md-combo[data-combo-for="${CSS.escape(id)}"]`);
+}
+
+function comboFilteredOptions(root) {
+  let options = [];
+  try {
+    options = JSON.parse(root.dataset.options || "[]");
+  } catch {
+    options = [];
+  }
+  if (root.dataset.comboMode !== "combo") return options;
+  const query = (root.querySelector("input")?.value || "").trim().toLowerCase();
+  if (!query || !root.classList.contains("filtering")) return options;
+  return options.filter((option) => option.label.toLowerCase().includes(query));
+}
+
+function openCombo(id, highlight) {
+  const root = comboRoot(id);
+  if (!root || root.classList.contains("disabled")) return;
+  const input = root.querySelector("input");
+  if (highlight === undefined) {
+    highlight = Math.max(0, comboFilteredOptions(root).findIndex((option) => option.value === input.value));
+  }
+  if (activeCombo && activeCombo.id !== id) closeCombo();
+  activeCombo = { id, highlight };
+  drawComboMenu();
+}
+
+function closeCombo() {
+  if (activeCombo) comboRoot(activeCombo.id)?.classList.remove("open", "filtering");
+  activeCombo = null;
+  comboMenuEl?.remove();
+  comboMenuEl = null;
+}
+
+function ensureComboMenuEl() {
+  if (comboMenuEl) return comboMenuEl;
+  comboMenuEl = document.createElement("div");
+  comboMenuEl.className = "md-combo-menu";
+  comboMenuEl.setAttribute("role", "listbox");
+  // mousedown keeps focus in the field so blur does not close the menu first.
+  comboMenuEl.addEventListener("mousedown", (event) => event.preventDefault());
+  comboMenuEl.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const item = event.target.closest("[data-combo-index]");
+    if (item && activeCombo) pickComboOption(activeCombo.id, Number(item.dataset.comboIndex));
+  });
+  comboMenuEl.addEventListener("mousemove", (event) => {
+    const item = event.target.closest("[data-combo-index]");
+    if (!item || !activeCombo) return;
+    const index = Number(item.dataset.comboIndex);
+    if (index === activeCombo.highlight) return;
+    activeCombo.highlight = index;
+    comboMenuEl.querySelectorAll("[data-combo-index]").forEach((el) => {
+      el.classList.toggle("active", Number(el.dataset.comboIndex) === index);
+    });
+  });
+  document.body.appendChild(comboMenuEl);
+  return comboMenuEl;
+}
+
+function drawComboMenu() {
+  if (!activeCombo) return;
+  const root = comboRoot(activeCombo.id);
+  if (!root) return closeCombo();
+  const options = comboFilteredOptions(root);
+  if (!options.length) {
+    root.classList.remove("open");
+    comboMenuEl?.remove();
+    comboMenuEl = null;
+    return;
+  }
+  activeCombo.highlight = Math.min(Math.max(activeCombo.highlight, 0), options.length - 1);
+  const currentValue = root.querySelector("input").value;
+  const menu = ensureComboMenuEl();
+  menu.innerHTML = options
+    .map(
+      (option, index) => `
+        <div class="md-combo-option ${index === activeCombo.highlight ? "active" : ""} ${option.value === currentValue ? "selected" : ""}" role="option" data-combo-index="${index}">
+          <span class="truncate-text">${escapeHtml(option.label)}</span>
+          ${option.value === currentValue ? `<span class="md-combo-check">${checkIcon()}</span>` : ""}
+        </div>
+      `,
+    )
+    .join("");
+  root.classList.add("open");
+  positionComboMenu();
+  menu.querySelector(".md-combo-option.active")?.scrollIntoView({ block: "nearest" });
+}
+
+function positionComboMenu() {
+  if (!activeCombo || !comboMenuEl) return;
+  const root = comboRoot(activeCombo.id);
+  if (!root) return closeCombo();
+  const rect = root.getBoundingClientRect();
+  const gap = 4;
+  const margin = 8;
+  const below = window.innerHeight - rect.bottom - gap - margin;
+  const above = rect.top - gap - margin;
+  comboMenuEl.style.maxHeight = "280px";
+  const natural = Math.min(comboMenuEl.scrollHeight, 280);
+  const openUp = below < natural && above > below;
+  const maxHeight = Math.max(80, Math.min(280, openUp ? above : below));
+  const width = Math.max(rect.width, 140);
+  comboMenuEl.style.width = `${width}px`;
+  comboMenuEl.style.left = `${Math.min(rect.left, window.innerWidth - width - margin)}px`;
+  comboMenuEl.style.maxHeight = `${maxHeight}px`;
+  comboMenuEl.style.top = openUp ? "auto" : `${rect.bottom + gap}px`;
+  comboMenuEl.style.bottom = openUp ? `${window.innerHeight - rect.top + gap}px` : "auto";
+  comboMenuEl.classList.toggle("up", openUp);
+}
+
+function pickComboOption(id, index) {
+  const root = comboRoot(id);
+  if (!root) return closeCombo();
+  const option = comboFilteredOptions(root)[index];
+  if (!option) return;
+  const input = root.querySelector("input");
+  input.value = option.value;
+  if (root.dataset.comboMode === "select") {
+    const label = root.querySelector(".md-combo-label");
+    label.textContent = option.label;
+    label.classList.remove("placeholder");
+  } else {
+    root.classList.toggle("has-value", Boolean(input.value));
+  }
+  closeCombo();
+  if (root.dataset.comboMode === "select") root.querySelector(".md-combo-trigger")?.focus();
+  else input.focus();
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+// Called at the end of render(): keep an open menu attached to the new DOM.
+function syncComboAfterRender() {
+  if (!activeCombo) return;
+  if (!comboRoot(activeCombo.id)) return closeCombo();
+  drawComboMenu();
+}
+
+function bindComboEvents() {
+  document.addEventListener(
+    "click",
+    (event) => {
+      if (event.target.closest(".md-combo-menu")) return;
+      const root = event.target.closest(".md-combo");
+      if (!root) {
+        if (activeCombo) closeCombo();
+        return;
+      }
+      // Keep the app's global click handlers (menu closing, card deselect) out of it.
+      event.stopPropagation();
+      const id = root.dataset.comboFor;
+      if (root.classList.contains("disabled")) return;
+      if (event.target.closest(".md-combo-clear")) {
+        const input = root.querySelector("input");
+        input.value = "";
+        root.classList.remove("has-value", "filtering");
+        input.focus();
+        openCombo(id, 0);
+        return;
+      }
+      if (root.dataset.comboMode === "select") {
+        if (activeCombo?.id === id) closeCombo();
+        else openCombo(id);
+        return;
+      }
+      const input = root.querySelector("input");
+      if (document.activeElement !== input) input.focus();
+      if (activeCombo?.id === id && event.target.closest(".md-combo-chevron")) closeCombo();
+      else if (activeCombo?.id !== id) openCombo(id);
+    },
+    true,
+  );
+
+  document.addEventListener("focusin", (event) => {
+    const input = event.target.closest?.(".md-combo-input");
+    if (input && activeCombo?.id !== input.id) openCombo(input.id);
+  });
+
+  document.addEventListener("focusout", (event) => {
+    const root = event.target.closest?.(".md-combo");
+    if (!root) return;
+    const id = root.dataset.comboFor;
+    setTimeout(() => {
+      if (activeCombo?.id !== id) return;
+      const current = comboRoot(id);
+      // A render() may have swapped the DOM; only close if focus really left.
+      if (!current || !current.contains(document.activeElement)) closeCombo();
+    }, 0);
+  });
+
+  document.addEventListener("input", (event) => {
+    const input = event.target.closest?.(".md-combo-input");
+    if (!input) return;
+    const root = input.closest(".md-combo");
+    root.classList.toggle("has-value", Boolean(input.value));
+    root.classList.add("filtering");
+    openCombo(input.id, 0);
+  });
+
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      const root = event.target.closest?.(".md-combo");
+      if (!root) return;
+      const id = root.dataset.comboFor;
+      const isOpen = activeCombo?.id === id && comboMenuEl;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (!isOpen) return openCombo(id);
+        const count = comboFilteredOptions(root).length;
+        activeCombo.highlight = (activeCombo.highlight + (event.key === "ArrowDown" ? 1 : -1) + count) % count;
+        drawComboMenu();
+      } else if (event.key === "Enter" && isOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        pickComboOption(id, activeCombo.highlight);
+      } else if (event.key === "Escape" && isOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeCombo();
+      } else if (event.key === "Tab" && isOpen) {
+        closeCombo();
+      }
+    },
+    true,
+  );
+
+  window.addEventListener("resize", positionComboMenu);
+  document.addEventListener(
+    "scroll",
+    (event) => {
+      if (comboMenuEl && !comboMenuEl.contains(event.target)) positionComboMenu();
+    },
+    true,
+  );
 }
 
 function loadGroupProfiles() {
@@ -860,8 +1132,7 @@ function groupParentOptions(currentName = "") {
   const current = normalizeGroupPath(currentName);
   return allGroupPaths()
     .filter((path) => path !== current && !groupPathWithin(path, current))
-    .map((path) => `<option value="${escapeAttr(path)}">${escapeHtml(path)}</option>`)
-    .join("");
+    .map((path) => ({ value: path, label: path }));
 }
 
 function groupChildren(parent = state.openedGroup) {
@@ -2806,11 +3077,13 @@ async function createFolder() {
 
 async function deleteRemote(entry) {
   const name = String(entry.path || "").split("/").filter(Boolean).slice(-1)[0] || entry.path || "Remote item";
+  // A link is always removed as a file (unlink), never as its target folder.
+  const asFolder = entry.isDir && !entry.isLink;
   const confirmed = await requestDeleteConfirmation({
-    title: entry.isDir ? "Remove folder" : "Remove file",
-    message: `Are you sure you want to remove this ${entry.isDir ? "folder" : "file"}?`,
+    title: asFolder ? "Remove folder" : "Remove file",
+    message: `Are you sure you want to remove this ${asFolder ? "folder" : "file"}?`,
     item: {
-      type: entry.isDir ? "folder" : "file",
+      type: asFolder ? "folder" : "file",
       title: name,
       subtitle: entry.path || "",
     },
@@ -2821,8 +3094,8 @@ async function deleteRemote(entry) {
       profile: state.activeHost,
       remotePath: entry.path,
       remote_path: entry.path,
-      isDir: entry.isDir,
-      is_dir: entry.isDir,
+      isDir: asFolder,
+      is_dir: asFolder,
     });
     pushLog("SFTP", `Deleted ${entry.path}.`, state.activeHost);
     await refreshSftp();
@@ -2973,6 +3246,7 @@ function render(options = {}) {
   `;
   app.querySelectorAll("input:not([type=checkbox]):not([type=file])").forEach(el => el.setAttribute("autocomplete", "off"));
   bindEvents();
+  syncComboAfterRender();
   if (terminalViewActive()) mountXterm(shouldRestoreTerminalFocus);
 
   requestAnimationFrame(() => {
@@ -3833,9 +4107,7 @@ function renderNetworkChart() {
         <span class="tx-color">↑ ${humanBytes(speeds.txSpeed)}/s</span>
         <span class="rx-color">↓ ${humanBytes(speeds.rxSpeed)}/s</span>
       </div>
-      <select class="net-iface-select" data-action="change-net-iface">
-        ${devices.map(d => `<option value="${escapeAttr(d.name)}" ${d.name === iface ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join("")}
-      </select>
+      ${renderMdSelect("netIfaceSelect", devices.map((d) => ({ value: d.name, label: d.name })), iface, { compact: true, action: "change-net-iface" })}
     </div>
     <div class="net-chart-container">
       <div class="net-chart-bg">
@@ -3957,11 +4229,15 @@ function renderSftpRow(entry) {
   `;
 }
 
+// Material Design icons (24px): folder, shortcut, insert_drive_file.
 function fileIcon(entry) {
-  if (entry.isDir) return `<span class="file-icon folder-icon" aria-hidden="true"></span>`;
-  const ext = (entry.extension || "").toLowerCase();
-  const label = ext && ext !== "file" ? ext.slice(0, 3).toUpperCase() : "";
-  return `<span class="file-icon document-icon" aria-hidden="true"><span>${escapeHtml(label)}</span></span>`;
+  if (entry.isLink) {
+    return `<span class="file-icon link" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 11l-6-6v5H8c-2.76 0-5 2.24-5 5v4h2v-4c0-1.65 1.35-3 3-3h7v5l6-6z"/></svg></span>`;
+  }
+  if (entry.isDir) {
+    return `<span class="file-icon folder" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg></span>`;
+  }
+  return `<span class="file-icon file" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg></span>`;
 }
 
 function renderSessionSnippets() {
@@ -4296,15 +4572,19 @@ function renderKeyTextArea(label, id, value, field, invalid = false) {
 
 function renderHostIdentityMenu() {
   return `
-    <div class="dropdown-menu" style="width: 100%; max-height: 200px; overflow-y: auto; z-index: 10;">
-      ${state.identities.map((ident) => `
+    <div class="dropdown-menu identity-suggest">
+      ${state.identities.map((ident) => {
+        const sub = [ident.username, ident.label?.trim()].filter(Boolean).join(", ");
+        return `
         <button data-action="select-host-identity" data-identity-id="${escapeAttr(ident.id)}">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <div style="color: var(--md-sys-color-primary); width:16px; height:16px;">${identityIcon()}</div>
-            <span>${escapeHtml(identityLabel(ident))}</span>
-          </div>
+          <span class="identity-suggest-icon">${identityIcon()}</span>
+          <span class="identity-suggest-text">
+            <strong class="truncate-text">${escapeHtml(identityLabel(ident))}</strong>
+            ${sub ? `<span class="truncate-text">${escapeHtml(sub)}</span>` : ""}
+          </span>
         </button>
-      `).join("")}
+      `;
+      }).join("")}
     </div>
   `;
 }
@@ -4312,9 +4592,7 @@ function renderHostIdentityMenu() {
 function renderHostDetails() {
   const host = state.editingHost || emptyHost();
   const title = state.editingIndex >= 0 ? "Host Details" : "New Host";
-  const groupOptions = allGroupPaths()
-    .map((group) => `<option value="${escapeAttr(group)}">${escapeHtml(group)}</option>`)
-    .join("");
+  const groupOptions = allGroupPaths().map((group) => ({ value: group, label: group }));
   return `
     <aside class="details-panel">
       <div class="details-head">
@@ -4337,8 +4615,7 @@ function renderHostDetails() {
           ${detailInput(t("Name"), "editName", host.name)}
           <div class="detail-field">
             <label>${t("Group")}</label>
-            <input id="editGroup" list="groupList" value="${escapeAttr(host.group)}" />
-            <datalist id="groupList">${groupOptions}</datalist>
+            ${renderMdCombo("editGroup", groupOptions, host.group, { placeholder: t("Group"), icon: groupIcon() })}
           </div>
           ${detailInput(t("Default SFTP path"), "editDefaultPath", host.defaultPath || "/root")}
         </section>
@@ -4353,6 +4630,7 @@ function renderHostDetails() {
           ${
             host.identityId
               ? `
+                <div class="identity-anchor">
                 <div class="identity-box" style="position:relative; display:flex; align-items:center; background: var(--md-sys-color-surface-container-high); padding:8px 12px; border-radius: var(--md-sys-shape-corner-medium); border: 1px solid var(--md-sys-color-primary); cursor:pointer;" data-action="toggle-host-identity-menu">
                   <div style="color: var(--md-sys-color-primary); margin-right:12px; width:24px; height:24px;">${identityIcon()}</div>
                   <div style="flex:1;">
@@ -4363,16 +4641,17 @@ function renderHostDetails() {
                     <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                   </button>
                 </div>
-                <style>.identity-box:hover .clear-ident-btn { opacity: 1 !important; }</style>
                 ${state.hostIdentityMenuOpen ? renderHostIdentityMenu() : ""}
+                </div>
+                <style>.identity-box:hover .clear-ident-btn { opacity: 1 !important; }</style>
               `
               : `
-                <div style="position:relative;">
-                  <div class="detail-field">
-                    <label>${t("Username")}</label>
+                <div class="detail-field">
+                  <label>${t("Username")}</label>
+                  <div class="identity-anchor">
                     <input id="editUsername" value="${escapeAttr(host.username)}" autocomplete="off" ${state.identities.length > 0 ? 'data-action="toggle-host-identity-menu"' : ""} />
+                    ${state.hostIdentityMenuOpen && state.identities.length > 0 ? renderHostIdentityMenu() : ""}
                   </div>
-                  ${state.hostIdentityMenuOpen && state.identities.length > 0 ? renderHostIdentityMenu() : ""}
                 </div>
                 ${renderHostAuthFields(host)}
               `
@@ -4414,8 +4693,7 @@ function renderGroupDetails() {
           </div>
           <div class="detail-field">
             <label>${t("Parent Group")}</label>
-            <input id="groupParent" list="groupParentList" value="${escapeAttr(parent)}" placeholder="${t("All hosts")}" />
-            <datalist id="groupParentList">${parentOptions}</datalist>
+            ${renderMdCombo("groupParent", parentOptions, parent, { placeholder: t("All hosts"), icon: groupIcon() })}
           </div>
         </section>
         <section class="details-card">
@@ -5254,7 +5532,7 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll('select[data-action="change-net-iface"]').forEach((element) => {
+  document.querySelectorAll('input[data-combo-action="change-net-iface"]').forEach((element) => {
     element.addEventListener("change", (event) => {
       const val = event.target.value;
       if (val) {

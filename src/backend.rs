@@ -480,8 +480,19 @@ pub async fn list_remote_dir(profile: HostProfile, path: String) -> Result<SftpD
             let metadata = entry.metadata();
             let name = entry.file_name();
             let full_path = normalize_remote_path(&entry.path());
-            let is_dir = metadata.is_dir();
-            let extension = if is_dir {
+            let is_link = metadata.is_symlink();
+            // read_dir reports the link itself; follow it so links to folders stay browsable.
+            let is_dir = if is_link {
+                sftp.metadata(full_path.clone())
+                    .await
+                    .map(|target| target.is_dir())
+                    .unwrap_or(false)
+            } else {
+                metadata.is_dir()
+            };
+            let extension = if is_link {
+                "link".to_owned()
+            } else if is_dir {
                 "folder".to_owned()
             } else {
                 Path::new(&name)
@@ -510,6 +521,7 @@ pub async fn list_remote_dir(profile: HostProfile, path: String) -> Result<SftpD
                         .unwrap_or_else(|| metadata.gid.unwrap_or_default().to_string())
                 ),
                 extension,
+                is_link,
             });
         }
 

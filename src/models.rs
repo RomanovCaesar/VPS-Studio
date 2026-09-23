@@ -170,6 +170,9 @@ pub struct RemoteEntry {
     pub permissions: Option<u32>,
     pub owner: String,
     pub extension: String,
+    /// Symbolic link; `is_dir` then describes the link target.
+    #[serde(default)]
+    pub is_link: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
