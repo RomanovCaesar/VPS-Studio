@@ -344,7 +344,29 @@ const i18n = {
     "SSH identity support is planned for a later milestone.": "SSH 身份支持将在后续版本中提供。",
     "SSH certificate support is planned for a later milestone.": "SSH 证书支持将在后续版本中提供。",
     "Known host removed": "已知主机已移除",
-    "Copied {0}": "已复制 {0}"
+    "Copied {0}": "已复制 {0}",
+    "Open": "打开",
+    "Open with...": "打开方式...",
+    "Rename": "重命名",
+    "Edit Permissions": "编辑权限",
+    "Delete {0} items": "删除 {0} 个项目",
+    "New folder": "新建文件夹",
+    "Confirm": "确认",
+    "Invalid name": "名称无效",
+    "Rename failed: {0}": "重命名失败：{0}",
+    "Change permissions failed: {0}": "修改权限失败：{0}",
+    "Remove {0} items": "移除 {0} 个项目",
+    "Are you sure you want to remove this folder and everything in it?": "确定要移除此文件夹及其中的所有内容吗？",
+    "Are you sure you want to remove these items? Folders are removed with everything in them.": "确定要移除这些项目吗？文件夹将连同其中的所有内容一起移除。",
+    "This is a link. Modifying this file may cause unexpected errors.": "这是一个链接，修改此文件可能引起不必要的错误。",
+    "Symlink is a directory. Cannot open directory with app.": "该链接指向一个目录，无法用应用打开目录。",
+    "Cannot open a directory with an app.": "无法用应用打开目录。",
+    "Read": "读取",
+    "Write": "写入",
+    "Execute": "执行",
+    "Owner group": "所属组",
+    "Others": "其他人",
+    "Octal": "八进制"
   }
 };
 
@@ -373,6 +395,8 @@ const state = {
   metrics: null,
   remotePath: "/root",
   remoteEntries: [],
+  sftpSelected: [],
+  sftpAnchor: null,
   terminal: "",
   term: null,
   localLine: {
@@ -581,6 +605,7 @@ function init() {
   // No native browser context menu anywhere; custom menus call preventDefault themselves.
   document.addEventListener("contextmenu", (event) => event.preventDefault());
   bindComboEvents();
+  bindSftpEvents();
   document.addEventListener("change", (event) => {
     const input = event.target.closest?.('input[data-combo-action="change-net-iface"]');
     if (!input?.value) return;
@@ -2169,7 +2194,8 @@ async function disconnect() {
 
 function appendTerminal(text) {
   terminalWrite(text);
-  if (document.activeElement?.id !== "commandInput") xterm?.focus();
+  const active = document.activeElement;
+  if (active?.id !== "commandInput" && !active?.closest?.(".app-dialog")) xterm?.focus();
 }
 
 function appendTerminalOutput(text) {
@@ -3194,8 +3220,12 @@ async function refreshSftp(path = state.remotePath) {
   if (!state.activeHost) return;
   try {
     const dir = await call("list_remote_dir", { profile: state.activeHost, path });
+    const samePath = dir.path === state.remotePath;
     state.remotePath = dir.path;
     state.remoteEntries = dir.entries || [];
+    const present = new Set(state.remoteEntries.map((entry) => entry.path));
+    state.sftpSelected = samePath ? state.sftpSelected.filter((item) => present.has(item)) : [];
+    if (!samePath || !present.has(state.sftpAnchor)) state.sftpAnchor = null;
     render();
   } catch (error) {
     state.status = t("SFTP failed: {0}", error);
@@ -3203,7 +3233,7 @@ async function refreshSftp(path = state.remotePath) {
   }
 }
 
-async function openRemote(entry) {
+async function openRemote(entry, { openWith = false } = {}) {
   if (entry.isDir) {
     await refreshSftp(entry.path);
     return;
@@ -3212,7 +3242,7 @@ async function openRemote(entry) {
     const watched = await call("open_remote_file", {
       profile: state.activeHost,
       remotePath: entry.path,
-      remote_path: entry.path,
+      openWith,
     });
     state.watchedFiles = state.watchedFiles.filter((file) => file.remotePath !== watched.remotePath);
     state.watchedFiles.push(watched);
@@ -3242,47 +3272,479 @@ async function uploadWatched(file) {
   }
 }
 
-async function createFolder() {
-  const input = document.querySelector("#newFolderName");
-  const name = input?.value.trim();
-  if (!name) return;
-  try {
-    await call("create_remote_folder", { profile: state.activeHost, parent: state.remotePath, name });
-    input.value = "";
-    pushLog("SFTP", `Created folder ${name}.`, state.activeHost);
-    await refreshSftp();
-  } catch (error) {
-    setStatus(t("Create folder failed: {0}", error));
+/* --------------------------------------------------------------------------
+   SFTP file browser: Termius-style selection, context menus and dialogs.
+   Menu and dialogs live on <body> so periodic render() calls never close
+   them or wipe what the user typed; selection only toggles row classes so
+   the table's scroll position is never reset.
+   -------------------------------------------------------------------------- */
+let sftpMenuEl = null;
+let sftpDialogEl = null;
+let sftpDialog = null;
+
+function sftpEntry(path) {
+  return state.remoteEntries.find((entry) => entry.path === path) || null;
+}
+
+function sftpSelectedEntries() {
+  return state.sftpSelected.map(sftpEntry).filter(Boolean);
+}
+
+function sftpVisibleEntries() {
+  const q = state.sftpFilter.trim().toLowerCase();
+  return state.remoteEntries.filter((entry) => !q || entry.name.toLowerCase().includes(q));
+}
+
+function applySftpSelection() {
+  const selected = new Set(state.sftpSelected);
+  document.querySelectorAll(".table-wrap tr[data-sftp-path]").forEach((row) => {
+    row.classList.toggle("selected", selected.has(row.dataset.sftpPath));
+  });
+}
+
+function selectSftpRow(path, { toggle = false, range = false } = {}) {
+  if (range && state.sftpAnchor) {
+    const paths = sftpVisibleEntries().map((entry) => entry.path);
+    const from = paths.indexOf(state.sftpAnchor);
+    const to = paths.indexOf(path);
+    if (from >= 0 && to >= 0) {
+      const [start, end] = from < to ? [from, to] : [to, from];
+      const span = paths.slice(start, end + 1);
+      state.sftpSelected = toggle ? [...new Set([...state.sftpSelected, ...span])] : span;
+      applySftpSelection();
+      return;
+    }
+  }
+  if (toggle) {
+    state.sftpSelected = state.sftpSelected.includes(path)
+      ? state.sftpSelected.filter((item) => item !== path)
+      : [...state.sftpSelected, path];
+  } else {
+    state.sftpSelected = [path];
+  }
+  state.sftpAnchor = path;
+  applySftpSelection();
+}
+
+function clearSftpSelection() {
+  if (!state.sftpSelected.length) return;
+  state.sftpSelected = [];
+  state.sftpAnchor = null;
+  applySftpSelection();
+}
+
+/* ---------- context menu ---------- */
+
+function sftpMenuIcon(name) {
+  const paths = {
+    open: '<path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>',
+    openWith: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/>',
+    rename: '<path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>',
+    delete: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>',
+    newFolder: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><path d="M12 11v6M9 14h6"/>',
+    permissions: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name]}</svg>`;
+}
+
+function openSftpMenu(x, y, target) {
+  closeSftpMenu();
+  const selected = sftpSelectedEntries();
+  const items = [];
+  const item = (cmd, icon, label, danger = false) => ({ cmd, icon, label, danger });
+  if (target && selected.length > 1) {
+    items.push(item("delete", "delete", t("Delete {0} items", selected.length), true));
+  } else if (target) {
+    const isFolder = target.isDir && !target.isLink;
+    if (!isFolder) {
+      items.push(item("open", "open", t("Open")));
+      items.push(item("openWith", "openWith", t("Open with...")));
+    }
+    items.push(item("rename", "rename", t("Rename")));
+    items.push(item("delete", "delete", t("Delete"), true));
+  }
+  items.push(item("refresh", "refresh", t("Refresh")));
+  items.push(item("newFolder", "newFolder", t("New Folder")));
+  if (target && selected.length <= 1) items.push(item("permissions", "permissions", t("Edit Permissions")));
+
+  sftpMenuEl = document.createElement("div");
+  sftpMenuEl.className = "context-menu sftp-menu";
+  sftpMenuEl.innerHTML = items
+    .map((entry) => `<button class="${entry.danger ? "danger-text" : ""}" data-sftp-cmd="${entry.cmd}">${sftpMenuIcon(entry.icon)} <span>${escapeHtml(entry.label)}</span></button>`)
+    .join("");
+  sftpMenuEl.addEventListener("mousedown", (event) => event.stopPropagation());
+  sftpMenuEl.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const button = event.target.closest("[data-sftp-cmd]");
+    if (!button) return;
+    closeSftpMenu();
+    runSftpCommand(button.dataset.sftpCmd, target);
+  });
+  document.body.appendChild(sftpMenuEl);
+  const rect = sftpMenuEl.getBoundingClientRect();
+  sftpMenuEl.style.left = `${Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))}px`;
+  sftpMenuEl.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
+}
+
+function closeSftpMenu() {
+  sftpMenuEl?.remove();
+  sftpMenuEl = null;
+}
+
+async function runSftpCommand(cmd, target) {
+  switch (cmd) {
+    case "open":
+      return sftpOpen(target);
+    case "openWith":
+      return sftpOpenWith(target);
+    case "rename":
+      return sftpRename(target);
+    case "delete":
+      return sftpDelete(sftpSelectedEntries().length ? sftpSelectedEntries() : [target]);
+    case "refresh":
+      return refreshSftp();
+    case "newFolder":
+      return sftpNewFolder();
+    case "permissions":
+      return sftpEditPermissions(target);
   }
 }
 
-async function deleteRemote(entry) {
-  const name = String(entry.path || "").split("/").filter(Boolean).slice(-1)[0] || entry.path || t("Remote item");
-  // A link is always removed as a file (unlink), never as its target folder.
-  const asFolder = entry.isDir && !entry.isLink;
-  const confirmed = await requestDeleteConfirmation({
-    title: asFolder ? t("Remove folder") : t("Remove file"),
-    message: asFolder ? t("Are you sure you want to remove this folder?") : t("Are you sure you want to remove this file?"),
-    item: {
-      type: asFolder ? "folder" : "file",
-      title: name,
-      subtitle: entry.path || "",
+/* ---------- commands ---------- */
+
+function sftpLinkError() {
+  showSftpError(t("This is a link. Modifying this file may cause unexpected errors."));
+}
+
+async function sftpOpen(entry) {
+  if (!entry) return;
+  if (entry.isDir) return refreshSftp(entry.path); // folders and links to folders
+  if (entry.isLink) return sftpLinkError();
+  return openRemote(entry);
+}
+
+async function sftpOpenWith(entry) {
+  if (!entry) return;
+  if (entry.isLink && entry.isDir) return showSftpError(t("Symlink is a directory. Cannot open directory with app."));
+  if (entry.isLink) return sftpLinkError();
+  if (entry.isDir) return showSftpError(t("Cannot open a directory with an app."));
+  return openRemote(entry, { openWith: true });
+}
+
+function validFileName(name) {
+  return name && name !== "." && name !== ".." && !/[\\/]/.test(name);
+}
+
+function sftpNewFolder() {
+  openSftpDialog({
+    kind: "input",
+    title: t("New folder"),
+    label: t("Folder name"),
+    value: "",
+    confirmLabel: t("Confirm"),
+    onConfirm: async (name) => {
+      if (!validFileName(name)) return t("Invalid name");
+      try {
+        await call("create_remote_folder", { profile: state.activeHost, parent: state.remotePath, name });
+        await refreshSftp();
+        selectSftpRow(joinPath(state.remotePath, name));
+      } catch (error) {
+        return t("Create folder failed: {0}", error);
+      }
     },
   });
+}
+
+function sftpRename(entry) {
+  if (!entry) return;
+  openSftpDialog({
+    kind: "input",
+    title: t("Rename"),
+    label: t("Name"),
+    value: entry.name,
+    selectBaseName: !entry.isDir,
+    confirmLabel: t("Rename"),
+    onConfirm: async (name) => {
+      if (name === entry.name) return;
+      if (!validFileName(name)) return t("Invalid name");
+      const to = joinPath(parentPath(entry.path), name);
+      try {
+        await call("rename_remote", { profile: state.activeHost, from: entry.path, to });
+        state.sftpSelected = [to];
+        state.sftpAnchor = to;
+        await refreshSftp();
+      } catch (error) {
+        return t("Rename failed: {0}", error);
+      }
+    },
+  });
+}
+
+function sftpEditPermissions(entry) {
+  if (!entry) return;
+  openSftpDialog({
+    kind: "permissions",
+    title: t("Edit Permissions"),
+    subtitle: entry.name,
+    mode: (entry.permissions ?? 0o644) & 0o777,
+    confirmLabel: t("Confirm"),
+    onConfirm: async (mode) => {
+      try {
+        await call("chmod_remote", { profile: state.activeHost, remotePath: entry.path, mode });
+        await refreshSftp();
+      } catch (error) {
+        return t("Change permissions failed: {0}", error);
+      }
+    },
+  });
+}
+
+async function sftpDelete(entries) {
+  entries = entries.filter(Boolean);
+  if (!entries.length) return;
+  const toItem = (entry) => ({
+    type: entry.isDir && !entry.isLink ? "folder" : "file",
+    title: entry.name,
+    subtitle: entry.path,
+  });
+  const single = entries.length === 1;
+  const asFolder = single && entries[0].isDir && !entries[0].isLink;
+  const confirmed = await requestDeleteConfirmation({
+    title: single ? (asFolder ? t("Remove folder") : t("Remove file")) : t("Remove {0} items", entries.length),
+    message: single
+      ? asFolder
+        ? t("Are you sure you want to remove this folder and everything in it?")
+        : t("Are you sure you want to remove this file?")
+      : t("Are you sure you want to remove these items? Folders are removed with everything in them."),
+    item: toItem(entries[0]),
+    affected: entries.slice(1).map(toItem),
+    affectedLabel: t("And these items:"),
+  });
   if (!confirmed) return;
-  try {
-    await call("delete_remote", {
-      profile: state.activeHost,
-      remotePath: entry.path,
-      remote_path: entry.path,
-      isDir: asFolder,
-      is_dir: asFolder,
-    });
-    pushLog("SFTP", `Deleted ${entry.path}.`, state.activeHost);
-    await refreshSftp();
-  } catch (error) {
-    setStatus(t("Delete failed: {0}", error));
+  for (const entry of entries) {
+    // A link is always removed as a file (unlink), never as its target folder.
+    const isDir = entry.isDir && !entry.isLink;
+    try {
+      await call("delete_remote", { profile: state.activeHost, remotePath: entry.path, isDir });
+      pushLog("SFTP", `Deleted ${entry.path}.`, state.activeHost);
+    } catch (error) {
+      await refreshSftp();
+      return showSftpError(t("Delete failed: {0}", error));
+    }
   }
+  state.sftpSelected = [];
+  await refreshSftp();
+}
+
+function joinPath(dir, name) {
+  return `${String(dir || "/").replace(/\/+$/, "")}/${name}`;
+}
+
+/* ---------- dialogs ---------- */
+
+function showSftpError(message) {
+  openSftpDialog({ kind: "error", title: t("Error"), message });
+}
+
+function openSftpDialog(dialog) {
+  closeSftpDialog();
+  sftpDialog = { ...dialog, error: "" };
+  sftpDialogEl = document.createElement("div");
+  sftpDialogEl.className = "delete-dialog-overlay app-dialog";
+  sftpDialogEl.addEventListener("mousedown", (event) => {
+    if (event.target === sftpDialogEl) closeSftpDialog();
+  });
+  sftpDialogEl.addEventListener("click", onSftpDialogClick);
+  sftpDialogEl.addEventListener("input", onSftpDialogInput);
+  sftpDialogEl.addEventListener("change", onSftpDialogInput);
+  sftpDialogEl.addEventListener("keydown", (event) => {
+    event.stopPropagation();
+    if (event.key === "Escape") closeSftpDialog();
+    if (event.key === "Enter" && sftpDialog?.kind !== "error") {
+      event.preventDefault();
+      confirmSftpDialog();
+    }
+  });
+  document.body.appendChild(sftpDialogEl);
+  drawSftpDialog();
+  const input = sftpDialogEl.querySelector(".md-outlined-field input, .perm-octal");
+  if (input) {
+    input.focus();
+    if (dialog.kind === "input") {
+      const dot = dialog.selectBaseName ? input.value.lastIndexOf(".") : -1;
+      input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
+    }
+  } else {
+    sftpDialogEl.querySelector(".delete-dialog-close")?.focus();
+  }
+}
+
+function closeSftpDialog() {
+  sftpDialogEl?.remove();
+  sftpDialogEl = null;
+  sftpDialog = null;
+}
+
+const PERM_BITS = [
+  ["Owner", 0o400, 0o200, 0o100],
+  ["Owner group", 0o040, 0o020, 0o010],
+  ["Others", 0o004, 0o002, 0o001],
+];
+
+function sftpDialogCanConfirm() {
+  if (!sftpDialog || sftpDialog.busy) return false;
+  if (sftpDialog.kind === "input") return Boolean(sftpDialog.value.trim());
+  return true;
+}
+
+function drawSftpDialog() {
+  const dialog = sftpDialog;
+  if (!dialog || !sftpDialogEl) return;
+  let body = "";
+  if (dialog.kind === "error") {
+    body = `<p class="app-dialog-message">${escapeHtml(dialog.message)}</p>`;
+  } else if (dialog.kind === "input") {
+    body = `
+      <label class="md-outlined-field">
+        <input type="text" value="${escapeAttr(dialog.value)}" autocomplete="off" spellcheck="false" placeholder=" " />
+        <span class="md-outlined-label">${escapeHtml(dialog.label)} *</span>
+      </label>`;
+  } else if (dialog.kind === "permissions") {
+    body = `
+      <div class="perm-subtitle">${escapeHtml(dialog.subtitle)}</div>
+      <div class="perm-grid">
+        <span></span><span>${t("Read")}</span><span>${t("Write")}</span><span>${t("Execute")}</span>
+        ${PERM_BITS.map(([who, ...bits]) => `
+          <span class="perm-who">${who === "Owner group" && state.language !== "zh" ? "Group" : t(who)}</span>
+          ${bits.map((bit) => `<label class="md-checkbox"><input type="checkbox" data-perm-bit="${bit}" ${dialog.mode & bit ? "checked" : ""} /><span></span></label>`).join("")}
+        `).join("")}
+      </div>
+      <label class="md-outlined-field perm-octal-field">
+        <input class="perm-octal" type="text" inputmode="numeric" maxlength="3" value="${dialog.mode.toString(8).padStart(3, "0")}" placeholder=" " />
+        <span class="md-outlined-label">${t("Octal")}</span>
+      </label>`;
+  }
+  const footer =
+    dialog.kind === "error"
+      ? ""
+      : `<footer class="delete-dialog-footer">
+          <button class="btn primary app-dialog-confirm" data-dialog-confirm ${sftpDialogCanConfirm() ? "" : "disabled"}>${escapeHtml(dialog.confirmLabel || t("Confirm"))}</button>
+        </footer>`;
+  sftpDialogEl.innerHTML = `
+    <section class="delete-dialog app-dialog-box" role="dialog" aria-modal="true">
+      <header class="delete-dialog-header">
+        <h2>${escapeHtml(dialog.title)}</h2>
+        <button class="icon-btn delete-dialog-close" data-dialog-close title="${t("Close")}" aria-label="${t("Close")}">${closeIcon()}</button>
+      </header>
+      <div class="delete-dialog-body">
+        ${body}
+        ${dialog.error ? `<div class="field-error">${escapeHtml(dialog.error)}</div>` : ""}
+      </div>
+      ${footer}
+    </section>`;
+}
+
+function refreshSftpDialogChrome() {
+  const confirm = sftpDialogEl?.querySelector("[data-dialog-confirm]");
+  if (confirm) confirm.disabled = !sftpDialogCanConfirm();
+  const error = sftpDialogEl?.querySelector(".field-error");
+  if (error && !sftpDialog.error) error.remove();
+}
+
+function onSftpDialogInput(event) {
+  if (!sftpDialog) return;
+  sftpDialog.error = "";
+  if (sftpDialog.kind === "input" && event.target.matches(".md-outlined-field input")) {
+    sftpDialog.value = event.target.value;
+  } else if (sftpDialog.kind === "permissions") {
+    if (event.target.matches("[data-perm-bit]")) {
+      const bit = Number(event.target.dataset.permBit);
+      sftpDialog.mode = event.target.checked ? sftpDialog.mode | bit : sftpDialog.mode & ~bit;
+      sftpDialogEl.querySelector(".perm-octal").value = sftpDialog.mode.toString(8).padStart(3, "0");
+    } else if (event.target.matches(".perm-octal")) {
+      const text = event.target.value.replace(/[^0-7]/g, "").slice(0, 3);
+      if (text !== event.target.value) event.target.value = text;
+      if (text.length) {
+        sftpDialog.mode = parseInt(text, 8);
+        sftpDialogEl.querySelectorAll("[data-perm-bit]").forEach((box) => {
+          box.checked = Boolean(sftpDialog.mode & Number(box.dataset.permBit));
+        });
+      }
+    }
+  }
+  refreshSftpDialogChrome();
+}
+
+function onSftpDialogClick(event) {
+  if (event.target.closest("[data-dialog-close]")) return closeSftpDialog();
+  if (event.target.closest("[data-dialog-confirm]")) confirmSftpDialog();
+}
+
+async function confirmSftpDialog() {
+  const dialog = sftpDialog;
+  if (!dialog?.onConfirm || !sftpDialogCanConfirm()) return;
+  dialog.busy = true;
+  refreshSftpDialogChrome();
+  const value = dialog.kind === "permissions" ? dialog.mode : dialog.value.trim();
+  const error = await dialog.onConfirm(value);
+  if (sftpDialog !== dialog) return;
+  dialog.busy = false;
+  if (error) {
+    dialog.error = error;
+    drawSftpDialog();
+    sftpDialogEl.querySelector(".md-outlined-field input")?.focus();
+    return;
+  }
+  closeSftpDialog();
+}
+
+/* ---------- event wiring (once, delegated) ---------- */
+
+function bindSftpEvents() {
+  document.addEventListener("click", (event) => {
+    if (sftpMenuEl && !sftpMenuEl.contains(event.target)) closeSftpMenu();
+    const wrap = event.target.closest(".table-wrap");
+    if (!wrap) return;
+    const row = event.target.closest("tr[data-sftp-path]");
+    if (!row) {
+      if (!event.target.closest("thead")) clearSftpSelection();
+      return;
+    }
+    selectSftpRow(row.dataset.sftpPath, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey });
+  });
+
+  document.addEventListener("dblclick", (event) => {
+    const row = event.target.closest(".table-wrap tr[data-sftp-path]");
+    if (!row || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    selectSftpRow(row.dataset.sftpPath);
+    sftpOpen(sftpEntry(row.dataset.sftpPath));
+  });
+
+  document.addEventListener("contextmenu", (event) => {
+    const wrap = event.target.closest(".table-wrap");
+    if (!wrap) return;
+    event.preventDefault();
+    const row = event.target.closest("tr[data-sftp-path]");
+    if (!row) {
+      if (event.target.closest("thead")) return;
+      clearSftpSelection();
+      openSftpMenu(event.clientX, event.clientY, null);
+      return;
+    }
+    const path = row.dataset.sftpPath;
+    if (!state.sftpSelected.includes(path)) selectSftpRow(path);
+    openSftpMenu(event.clientX, event.clientY, sftpEntry(path));
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && sftpMenuEl) closeSftpMenu();
+  });
+  window.addEventListener("resize", closeSftpMenu);
+  // Not "scroll": render() restores scroll positions and would close the menu.
+  document.addEventListener("wheel", (event) => {
+    if (sftpMenuEl && !sftpMenuEl.contains(event.target)) closeSftpMenu();
+  }, { capture: true, passive: true });
 }
 
 function parentPath(path) {
@@ -4387,19 +4849,18 @@ function renderSftp() {
       <button class="icon-btn" data-action="sftp-up" title="${t("Parent folder")}">&lt;</button>
       <div class="path-pill">${escapeHtml(state.remotePath)}</div>
       <div class="search"><input id="sftpFilter" value="${escapeAttr(state.sftpFilter)}" placeholder="${t('Filter files...')}" /></div>
-      <input id="newFolderName" class="folder-input" placeholder="${t('Folder name')}" />
       <button class="btn" data-action="create-folder">${t("New Folder")}</button>
     </div>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>${t("Name")}</th><th style="width:120px">${t("Size")}</th><th style="width:110px">${t("Kind")}</th><th style="width:160px">${t("Modified")}</th><th style="width:100px">${t("Mode")}</th><th style="width:130px">${t("Owner")}</th><th style="width:100px"></th></tr>
+          <tr><th>${t("Name")}</th><th style="width:120px">${t("Size")}</th><th style="width:110px">${t("Kind")}</th><th style="width:160px">${t("Modified")}</th><th style="width:100px">${t("Mode")}</th><th style="width:130px">${t("Owner")}</th></tr>
         </thead>
         <tbody>
           ${
             entries.length
               ? entries.map(renderSftpRow).join("")
-              : `<tr><td colspan="7" class="empty">${t("No files loaded.")}</td></tr>`
+              : `<tr><td colspan="6" class="empty">${t("No files loaded.")}</td></tr>`
           }
         </tbody>
       </table>
@@ -4409,14 +4870,13 @@ function renderSftp() {
 
 function renderSftpRow(entry) {
   return `
-    <tr data-sftp-path="${escapeAttr(entry.path)}">
-      <td><button class="file-name btn ghost" data-action="open-remote" data-path="${escapeAttr(entry.path)}">${fileIcon(entry)} <span>${escapeHtml(entry.name)}</span></button></td>
+    <tr data-sftp-path="${escapeAttr(entry.path)}" class="${state.sftpSelected.includes(entry.path) ? "selected" : ""}">
+      <td><div class="file-name">${fileIcon(entry)} <span class="truncate-text">${escapeHtml(entry.name)}</span></div></td>
       <td>${entry.isDir ? "-" : humanBytes(entry.size)}</td>
       <td>${escapeHtml(entry.extension)}</td>
       <td>${formatTime(entry.modified)}</td>
       <td>${formatMode(entry.permissions)}</td>
       <td>${escapeHtml(entry.owner || "-")}</td>
-      <td><button class="icon-btn" title="${t("Delete")}" data-action="delete-remote" data-path="${escapeAttr(entry.path)}">${t("Del")}</button></td>
     </tr>
   `;
 }
@@ -5556,18 +6016,8 @@ function bindEvents() {
           refreshSftp(parentPath(state.remotePath));
           break;
         case "create-folder":
-          createFolder();
+          sftpNewFolder();
           break;
-        case "open-remote": {
-          const entry = state.remoteEntries.find((item) => item.path === element.dataset.path);
-          if (entry) openRemote(entry);
-          break;
-        }
-    case "delete-remote": {
-      const entry = state.remoteEntries.find((item) => item.path === element.dataset.path);
-      if (entry) await deleteRemote(entry);
-      break;
-    }
         case "upload-file": {
           const file = state.watchedFiles.find((item) => item.remotePath === element.dataset.remotePath);
           if (file) uploadWatched(file);

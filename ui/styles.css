@@ -2050,3 +2050,176 @@ button:not(:disabled):active,
 .file-icon.file {
   color: var(--md-sys-color-on-surface-variant);
 }
+
+/* ==========================================================================
+   SFTP selection, context menu and dialogs (Termius-style)
+   ========================================================================== */
+
+.table-wrap tbody tr[data-sftp-path] {
+  cursor: default;
+  user-select: none;
+}
+
+.table-wrap tbody tr.selected td,
+.table-wrap tbody tr.selected:hover td {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.table-wrap tbody tr.selected .file-icon {
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.file-name > .truncate-text {
+  min-width: 0;
+}
+
+.sftp-menu {
+  z-index: 2000;
+  width: auto;
+  min-width: 220px;
+}
+
+.app-dialog-box {
+  width: min(520px, calc(100vw - 48px));
+}
+
+.app-dialog-message {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.app-dialog .delete-dialog-footer .btn {
+  min-width: 112px;
+  height: 42px;
+}
+
+.app-dialog .field-error {
+  margin-top: 12px;
+}
+
+/* MD3 outlined text field with a floating label */
+.md-outlined-field {
+  position: relative;
+  display: block;
+}
+
+.md-outlined-field input {
+  width: 100%;
+  height: 52px;
+  padding: 0 16px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  outline: none;
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+  font-size: 15px;
+  transition: border-color 150ms var(--md-sys-motion-standard), box-shadow 150ms var(--md-sys-motion-standard);
+}
+
+.md-outlined-field input:focus {
+  border-color: var(--md-sys-color-primary);
+  box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
+}
+
+.md-outlined-label {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  padding: 0 4px;
+  color: var(--md-sys-color-on-surface-variant);
+  background: var(--md-sys-color-surface-container-high);
+  font-size: 15px;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: top 150ms var(--md-sys-motion-standard), font-size 150ms var(--md-sys-motion-standard), color 150ms ease;
+}
+
+.md-outlined-field input:focus + .md-outlined-label,
+.md-outlined-field input:not(:placeholder-shown) + .md-outlined-label {
+  top: 0;
+  font-size: 12px;
+}
+
+.md-outlined-field input:focus + .md-outlined-label {
+  color: var(--md-sys-color-primary);
+}
+
+/* Permissions editor */
+.perm-subtitle {
+  margin-bottom: 16px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.perm-grid {
+  display: grid;
+  grid-template-columns: 1fr repeat(3, 72px);
+  align-items: center;
+  row-gap: 6px;
+  margin-bottom: 20px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.perm-grid .perm-who {
+  color: var(--md-sys-color-on-surface);
+  font-size: 14px;
+  text-align: left;
+}
+
+.perm-octal-field {
+  width: 140px;
+}
+
+.perm-octal-field input {
+  font-family: "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: 2px;
+}
+
+/* MD3 checkbox */
+.md-checkbox {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.md-checkbox:hover {
+  background: var(--md-sys-state-hover);
+}
+
+.md-checkbox input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.md-checkbox span {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--md-sys-color-on-surface-variant);
+  border-radius: 2px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.md-checkbox input:checked + span {
+  border-color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-primary)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z' fill='%23062e6f'/%3E%3C/svg%3E")
+    center / 16px no-repeat;
+}
+
+.md-checkbox input:focus-visible + span {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 3px;
+}

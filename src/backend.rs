@@ -541,6 +541,7 @@ pub async fn list_remote_dir(profile: HostProfile, path: String) -> Result<SftpD
 pub async fn open_remote_file(
     profile: HostProfile,
     remote_path: String,
+    open_with: Option<bool>,
 ) -> Result<WatchedFile, String> {
     async move {
         let sftp = connect_sftp(&profile).await?;
@@ -559,7 +560,11 @@ pub async fn open_remote_file(
             .with_context(|| format!("write {}", local_path.display()))?;
 
         let modified = file_modified_ms(&local_path).unwrap_or_else(now_ms);
-        let _ = open::that(&local_path);
+        if open_with.unwrap_or(false) {
+            open_with_chooser(&local_path)?;
+        } else {
+            let _ = open::that(&local_path);
+        }
 
         Ok(WatchedFile {
             remote_path,
@@ -615,6 +620,99 @@ pub fn check_watched_files(files: Vec<WatchedFile>) -> Vec<WatchedFile> {
 }
 
 #[tauri::command]
+pub async fn rename_remote(profile: HostProfile, from: String, to: String) -> Result<(), String> {
+    async move {
+        let sftp = connect_sftp(&profile).await?;
+        sftp.rename(from.clone(), to.clone())
+            .await
+            .with_context(|| format!("rename {from} to {to}"))?;
+        Ok(())
+    }
+    .await
+    .map_err(|err: anyhow::Error| format!("{err:#}"))
+}
+
+#[tauri::command]
+pub async fn chmod_remote(profile: HostProfile, remote_path: String, mode: u32) -> Result<(), String> {
+    async move {
+        let sftp = connect_sftp(&profile).await?;
+        let mut attrs = russh_sftp::protocol::FileAttributes::empty();
+        attrs.permissions = Some(mode & 0o7777);
+        sftp.set_metadata(remote_path.clone(), attrs)
+            .await
+            .with_context(|| format!("change permissions of {remote_path}"))?;
+        Ok(())
+    }
+    .await
+    .map_err(|err: anyhow::Error| format!("{err:#}"))
+}
+
+/// Delete a remote folder and everything inside it. Symlinks are unlinked,
+/// never followed, so a link to a folder never deletes the target's contents.
+async fn remove_remote_dir_all(sftp: &SftpSession, root: &str) -> Result<()> {
+    // Depth-first: collect folders, delete files on the way, then folders deepest first.
+    let mut pending = vec![root.to_owned()];
+    let mut folders = Vec::new();
+    while let Some(dir) = pending.pop() {
+        for entry in sftp
+            .read_dir(dir.clone())
+            .await
+            .with_context(|| format!("read remote directory {dir}"))?
+        {
+            let name = entry.file_name();
+            if name == "." || name == ".." {
+                continue;
+            }
+            let path = join_remote_path(&dir, &name);
+            let metadata = entry.metadata();
+            if metadata.is_dir() && !metadata.is_symlink() {
+                pending.push(path);
+            } else {
+                sftp.remove_file(path.clone())
+                    .await
+                    .with_context(|| format!("delete remote file {path}"))?;
+            }
+        }
+        folders.push(dir);
+    }
+    for dir in folders.into_iter().rev() {
+        sftp.remove_dir(dir.clone())
+            .await
+            .with_context(|| format!("delete remote folder {dir}"))?;
+    }
+    Ok(())
+}
+
+/// Show the OS "Open with" application chooser for a local file.
+fn open_with_chooser(path: &Path) -> Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("rundll32.exe")
+            .arg("shell32.dll,OpenAs_RunDLL")
+            .arg(path)
+            .spawn()
+            .context("open the Windows 'Open with' dialog")?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            "set f to POSIX file {:?}\ntell application \"Finder\"\nactivate\nopen f using (choose application)\nend tell",
+            path.to_string_lossy()
+        );
+        Command::new("osascript")
+            .arg("-e")
+            .arg(script)
+            .spawn()
+            .context("open the macOS application chooser")?;
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        open::that(path).context("open file")?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn create_remote_folder(
     profile: HostProfile,
     parent: String,
@@ -648,9 +746,7 @@ pub async fn delete_remote(
     async move {
         let sftp = connect_sftp(&profile).await?;
         if is_dir {
-            sftp.remove_dir(remote_path.clone())
-                .await
-                .with_context(|| format!("delete remote folder {remote_path}"))?;
+            remove_remote_dir_all(&sftp, &remote_path).await?;
         } else {
             sftp.remove_file(remote_path.clone())
                 .await
