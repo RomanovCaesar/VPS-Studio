@@ -1090,6 +1090,14 @@ button:disabled {
   background: #000;
 }
 
+/* The local terminal has no command bar: one row that fills the workspace.
+   Without a fixed height its size followed xterm's rows, so fit() kept
+   resizing it (jitter, cleared selection) and the bottom was cut off. */
+.local-terminal {
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+}
+
 .terminal-xterm {
   min-height: 0;
   overflow: hidden;
