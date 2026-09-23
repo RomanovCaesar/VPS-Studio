@@ -459,6 +459,12 @@ async function call(command, args = {}) {
 function init() {
   document.addEventListener("click", handleGlobalClick);
   bindComboEvents();
+  document.addEventListener("change", (event) => {
+    const input = event.target.closest?.('input[data-combo-action="change-net-iface"]');
+    if (!input?.value) return;
+    state.selectedNetInterface = input.value;
+    refreshMonitorPanel();
+  });
   state.hosts = [emptyHost()];
   state.selectedHostId = state.hosts[0].id;
   state.status = "Loading hosts...";
@@ -2996,17 +3002,23 @@ async function refreshMetrics() {
       state.metricsHistory.shift();
     }
 
-    if (document.activeElement?.tagName === "SELECT") {
-      // 正在操作下拉菜单时跳过渲染，防止菜单被意外关掉
-      return;
-    }
-    render();
+    refreshMonitorPanel();
   } catch (error) {
     state.status = `Metrics failed: ${error}`;
-    if (document.activeElement?.tagName !== "SELECT") {
-      render();
-    }
+    render();
   }
+}
+
+// Repaint only the session monitor sidebar. A full render() rebuilds the SFTP
+// table and resets its scroll position, which stutters an in-progress scroll.
+function refreshMonitorPanel() {
+  const monitor = state.view === "session" ? document.querySelector(".session > .monitor") : null;
+  if (!monitor) {
+    render();
+    return;
+  }
+  monitor.innerHTML = renderMonitor();
+  syncComboAfterRender();
 }
 
 async function refreshSftp(path = state.remotePath) {
@@ -3114,8 +3126,10 @@ function parentPath(path) {
 async function pollWatchedFiles() {
   if (!state.watchedFiles.length) return;
   try {
+    const before = JSON.stringify(state.watchedFiles.map((file) => [file.remotePath, file.dirty]));
     state.watchedFiles = await call("check_watched_files", { files: state.watchedFiles });
-    render();
+    const after = JSON.stringify(state.watchedFiles.map((file) => [file.remotePath, file.dirty]));
+    if (before !== after) render();
   } catch {
     // 临时文件可能被用户删除，做容错处理
   }
@@ -5529,16 +5543,6 @@ function bindEvents() {
         y: event.clientY,
       };
       render();
-    });
-  });
-
-  document.querySelectorAll('input[data-combo-action="change-net-iface"]').forEach((element) => {
-    element.addEventListener("change", (event) => {
-      const val = event.target.value;
-      if (val) {
-        state.selectedNetInterface = val;
-        render();
-      }
     });
   });
 
