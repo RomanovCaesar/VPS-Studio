@@ -1371,6 +1371,31 @@ tr:hover td {
   color: var(--md-sys-color-error);
 }
 
+/* Menu item icons: 20px MD3 leading icon (sizing was lost in the M3 refactor) */
+.context-menu button svg {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  color: var(--md-sys-color-on-surface-variant);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.context-menu .danger-text svg {
+  color: var(--md-sys-color-error);
+}
+
+.context-menu button > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .lang-menu {
   position: relative;
   margin-right: 12px;
