@@ -11,6 +11,7 @@ tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 anyhow = "1"
+arboard = { version = "3", default-features = false }
 chrono = { version = "0.4", features = ["clock", "serde"] }
 dirs = "5"
 open = "5"

@@ -662,6 +662,22 @@ pub async fn delete_remote(
     .map_err(|err: anyhow::Error| format!("{err:#}"))
 }
 
+/// System clipboard access for the terminal (copy on select, paste on right click).
+/// Done natively so WebView2 never shows a clipboard permission prompt.
+#[tauri::command]
+pub fn read_clipboard_text() -> Result<String, String> {
+    arboard::Clipboard::new()
+        .and_then(|mut clipboard| clipboard.get_text())
+        .map_err(|err| format!("read clipboard: {err}"))
+}
+
+#[tauri::command]
+pub fn write_clipboard_text(text: String) -> Result<(), String> {
+    arboard::Clipboard::new()
+        .and_then(|mut clipboard| clipboard.set_text(text))
+        .map_err(|err| format!("write clipboard: {err}"))
+}
+
 #[tauri::command]
 pub async fn start_local_shell(
     window: tauri::Window,

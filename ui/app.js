@@ -458,6 +458,8 @@ async function call(command, args = {}) {
 
 function init() {
   document.addEventListener("click", handleGlobalClick);
+  // No native browser context menu anywhere; custom menus call preventDefault themselves.
+  document.addEventListener("contextmenu", (event) => event.preventDefault());
   bindComboEvents();
   document.addEventListener("change", (event) => {
     const input = event.target.closest?.('input[data-combo-action="change-net-iface"]');
@@ -2469,6 +2471,7 @@ function mountXterm(focus = false) {
   if (!terminal.element) {
     pane.replaceChildren();
     terminal.open(pane);
+    bindXtermClipboard(terminal);
   } else if (terminal.element.parentElement !== pane) {
     pane.replaceChildren();
     pane.appendChild(terminal.element);
@@ -2478,6 +2481,52 @@ function mountXterm(focus = false) {
   if (xtermResizeObserver) xtermResizeObserver.disconnect();
   xtermResizeObserver = new ResizeObserver(() => fitXterm());
   xtermResizeObserver.observe(pane);
+}
+
+// Termius-style clipboard: releasing a selection copies it, right click pastes.
+function bindXtermClipboard(terminal) {
+  const element = terminal.element;
+  element.addEventListener("mouseup", (event) => {
+    if (event.button !== 0) return;
+    // Let xterm finish updating the selection (double/triple click) first.
+    setTimeout(() => {
+      const text = terminal.hasSelection() ? terminal.getSelection() : "";
+      if (text) writeClipboardText(text);
+    }, 0);
+  });
+  element.addEventListener("contextmenu", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const text = await readClipboardText();
+    if (text) terminal.paste(text);
+    terminal.focus();
+  });
+}
+
+async function writeClipboardText(text) {
+  try {
+    if (invoke) await invoke("write_clipboard_text", { text });
+    else await navigator.clipboard.writeText(text);
+  } catch {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      setStatus("Copy failed");
+    }
+  }
+}
+
+async function readClipboardText() {
+  try {
+    if (invoke) return await invoke("read_clipboard_text");
+    return await navigator.clipboard.readText();
+  } catch {
+    try {
+      return await navigator.clipboard.readText();
+    } catch {
+      return "";
+    }
+  }
 }
 
 function fitXterm() {
