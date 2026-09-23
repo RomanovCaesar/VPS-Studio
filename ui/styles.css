@@ -895,8 +895,8 @@ button:disabled {
 .toggle {
   position: relative;
   display: inline-flex;
-  width: 52px;
-  height: 32px;
+  width: 44px;
+  height: 24px;
 }
 
 .toggle input {
@@ -916,10 +916,10 @@ button:disabled {
 
 .toggle span::after {
   position: absolute;
-  top: 8px;
+  top: 6px;
   left: 6px;
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   border-radius: var(--md-sys-shape-corner-full);
   background: var(--md-sys-color-outline);
   transition: transform 160ms var(--md-sys-motion-standard), background 160ms ease;
@@ -932,11 +932,11 @@ button:disabled {
 }
 
 .toggle input:checked + span::after {
-  transform: translateX(20px);
+  transform: translateX(18px);
   background: var(--md-sys-color-on-primary);
-  width: 20px;
-  height: 20px;
-  top: 6px;
+  width: 16px;
+  height: 16px;
+  top: 4px;
   left: 4px;
 }
 
