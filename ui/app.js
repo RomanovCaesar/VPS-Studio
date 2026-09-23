@@ -223,15 +223,135 @@ const i18n = {
     "Key passphrase": "密钥密码短语",
     "Legacy devices": "旧设备",
     "Local PowerShell opened at ": "本地 PowerShell 打开于 ",
-    "More options": "更多选项"
+    "More options": "更多选项",
+    "Convert to Host": "转换为主机",
+    "Edit Group Details": "编辑群组详情",
+    "Edit Host Details": "编辑主机详情",
+    "Duplicate": "复制副本",
+    "Edit key": "编辑密钥",
+    "Edit identity": "编辑身份",
+    "Edit snippet": "编辑代码片段",
+    "{0} Host": "{0} 台主机",
+    "{0} Hosts": "{0} 台主机",
+    "Add a label...": "添加标签...",
+    "Auth key": "密钥认证",
+    "Auth password": "密码认证",
+    "Type {0}": "类型 {0}",
+    "Type unknown": "类型未知",
+    "Public Key": "公钥",
+    "No keys saved": "暂无保存的密钥",
+    "Linked to": "已关联到",
+    "Unbind": "解除关联",
+    "Importing...": "导入中...",
+    "SSH identity": "SSH 身份",
+    "SSH port {0}": "SSH 端口 {0}",
+    "Remove item": "移除项目",
+    "This action cannot be undone.": "此操作无法撤销。",
+    "And these items:": "以及以下项目：",
+    "And these hosts:": "以及以下主机：",
+    "Remove a host": "移除主机",
+    "You are going to remove this host:": "你将要移除此主机：",
+    "Remove a group": "移除群组",
+    "Remove a group and hosts": "移除群组及其主机",
+    "You are going to remove this group:": "你将要移除此群组：",
+    "Remove key": "移除密钥",
+    "Are you sure you want to remove this key?": "确定要移除此密钥吗？",
+    "Remove snippet": "移除代码片段",
+    "Are you sure you want to remove this snippet?": "确定要移除此代码片段吗？",
+    "Remove identity": "移除身份",
+    "Are you sure you want to remove this identity?": "确定要移除此身份吗？",
+    "Remove known host": "移除已知主机",
+    "Are you sure you want to remove this known host?": "确定要移除此已知主机吗？",
+    "Remove folder": "移除文件夹",
+    "Remove file": "移除文件",
+    "Are you sure you want to remove this folder?": "确定要移除此文件夹吗？",
+    "Are you sure you want to remove this file?": "确定要移除此文件吗？",
+    "Unnamed host": "未命名主机",
+    "Unnamed key": "未命名密钥",
+    "Unnamed snippet": "未命名代码片段",
+    "Unnamed identity": "未命名身份",
+    "Unknown host": "未知主机",
+    "Remote item": "远程项目",
+    "Waiting for network data...": "正在等待网络数据...",
+    "No network devices found": "未找到网络设备",
+    "Waiting for disk data...": "正在等待磁盘数据...",
+    "Local edits detected:": "检测到本地修改：",
+    "Upload": "上传",
+    "Discard": "放弃",
+    "Parent folder": "上级文件夹",
+    "Opened local PowerShell.": "已打开本地 PowerShell。",
+    "Loading hosts...": "正在加载主机...",
+    "Load hosts failed: {0}": "加载主机失败：{0}",
+    "Name is required": "名称不能为空",
+    "Group is required": "群组不能为空",
+    "Host is required": "主机地址不能为空",
+    "Port is required": "端口不能为空",
+    "Username is required": "用户名不能为空",
+    "Private key path is required": "私钥路径不能为空",
+    "Choose a key from Keychain first": "请先从密钥串中选择一个密钥",
+    "Password is required": "密码不能为空",
+    "Host saved": "主机已保存",
+    "Host duplicated": "主机已复制",
+    "Opened group {0}": "已打开群组 {0}",
+    "Group {0} has no hosts": "群组 {0} 中没有主机",
+    "Group removed": "群组已移除",
+    "Group name is required": "群组名称不能为空",
+    "Group username is required": "群组用户名不能为空",
+    "Group password is required": "群组密码不能为空",
+    "Group key path is required": "群组密钥路径不能为空",
+    "Choose a group key from Keychain first": "请先从密钥串中为群组选择一个密钥",
+    "Group saved": "群组已保存",
+    "Blank key discarded": "已丢弃空白密钥",
+    "Key saved": "密钥已保存",
+    "Generated {0}": "已生成 {0}",
+    "Generate key failed: {0}": "生成密钥失败：{0}",
+    "Key removed": "密钥已移除",
+    "Blank snippet discarded": "已丢弃空白代码片段",
+    "Snippet saved": "代码片段已保存",
+    "Snippet removed": "代码片段已移除",
+    "Snippet saved from history": "已从历史记录保存代码片段",
+    "Opening local {0}...": "正在打开本地 {0}...",
+    "{0} connected at {1}": "{0} 连接于 {1}",
+    "Open local terminal failed: {0}": "打开本地终端失败：{0}",
+    "Selected Keychain item has no private key": "所选密钥串条目没有私钥",
+    "Connecting to {0}...": "正在连接到 {0}...",
+    "Connected at {0}": "连接于 {0}",
+    "Connection failed: {0}": "连接失败：{0}",
+    "Reconnecting shell: {0}": "正在重新连接 Shell：{0}",
+    "Reconnecting shell...": "正在重新连接 Shell...",
+    "Interactive shell reconnected": "交互式 Shell 已重新连接",
+    "Reconnect failed: {0}": "重新连接失败：{0}",
+    "Local terminal closed": "本地终端已关闭",
+    "SSH channel closed": "SSH 通道已关闭",
+    "Terminal listener failed: {0}": "终端监听失败：{0}",
+    "Send failed: {0}": "发送失败：{0}",
+    "Copy failed": "复制失败",
+    "Metrics failed: {0}": "获取监控数据失败：{0}",
+    "SFTP failed: {0}": "SFTP 失败：{0}",
+    "Opened {0}": "已打开 {0}",
+    "Open failed: {0}": "打开失败：{0}",
+    "Uploaded {0}": "已上传 {0}",
+    "Upload failed: {0}": "上传失败：{0}",
+    "Create folder failed: {0}": "创建文件夹失败：{0}",
+    "Delete failed: {0}": "删除失败：{0}",
+    "Copied key field": "已复制密钥字段",
+    "Imported {0}": "已导入 {0}",
+    "Import failed: {0}": "导入失败：{0}",
+    "file read error": "文件读取错误",
+    "Identity removed": "身份已移除",
+    "Identity saved": "身份已保存",
+    "Saving known host...": "正在保存已知主机...",
+    "SSH identity support is planned for a later milestone.": "SSH 身份支持将在后续版本中提供。",
+    "SSH certificate support is planned for a later milestone.": "SSH 证书支持将在后续版本中提供。",
+    "Known host removed": "已知主机已移除",
+    "Copied {0}": "已复制 {0}"
   }
 };
 
-function t(key) {
-  if (state.language === "zh") {
-    return i18n.zh[key] || key;
-  }
-  return key;
+// t("Opened {0}", name): translate, then fill {0}, {1}... placeholders.
+function t(key, ...args) {
+  const text = state.language === "zh" ? i18n.zh[key] || key : key;
+  return args.length ? text.replace(/\{(\d+)\}/g, (match, index) => (index < args.length ? String(args[index] ?? "") : match)) : text;
 }
 
 const state = {
@@ -469,7 +589,7 @@ function init() {
   });
   state.hosts = [emptyHost()];
   state.selectedHostId = state.hosts[0].id;
-  state.status = "Loading hosts...";
+  state.status = t("Loading hosts...");
   render();
   loadInitialHosts();
 }
@@ -492,16 +612,16 @@ async function loadInitialHosts() {
     if (knownHosts && knownHosts.length) {
       state.knownHosts = knownHosts;
     }
-    state.status = "Ready";
+    state.status = t("Ready");
     if (!state.hosts.length) state.hosts = [emptyHost()];
     state.selectedHostId = state.hosts[0]?.id ?? null;
-    state.status = "Ready";
+    state.status = t("Ready");
     pushLog("App", `Loaded ${state.hosts.length} host profile(s).`);
   } catch (error) {
     state.hosts = [emptyHost()];
     state.selectedHostId = state.hosts[0].id;
     pushLog("App", `Load hosts failed: ${error}`);
-    state.status = `Load hosts failed: ${error}`;
+    state.status = t("Load hosts failed: {0}", error);
   }
   render();
 }
@@ -586,19 +706,19 @@ function rawValue(id) {
 }
 
 function keyLabel(key) {
-  return key?.label?.trim() || "Add a label...";
+  return key?.label?.trim() || t("Add a label...");
 }
 
 function identityLabel(ident) {
-  return ident?.label?.trim() || "Add a label...";
+  return ident?.label?.trim() || t("Add a label...");
 }
 
 function keyType(key) {
   const text = `${key?.privateKey || ""}\n${key?.publicKey || ""}`.toLowerCase();
-  if (text.includes("ed25519")) return "Type ED25519";
-  if (text.includes("rsa")) return "Type RSA";
-  if (text.includes("ecdsa")) return "Type ECDSA";
-  return "Type unknown";
+  if (text.includes("ed25519")) return t("Type {0}", "ED25519");
+  if (text.includes("rsa")) return t("Type {0}", "RSA");
+  if (text.includes("ecdsa")) return t("Type {0}", "ECDSA");
+  return t("Type unknown");
 }
 
 function privateKeyInvalid(key) {
@@ -1365,15 +1485,15 @@ function closeEditor() {
 
 async function saveEditor(options = {}) {
   const host = ensureHost(state.editingHost);
-  if (!host.name.trim()) return setStatus("Name is required");
-  if (!host.group.trim()) return setStatus("Group is required");
-  if (!host.host.trim()) return setStatus("Host is required");
-  if (!String(host.port).trim()) return setStatus("Port is required");
+  if (!host.name.trim()) return setStatus(t("Name is required"));
+  if (!host.group.trim()) return setStatus(t("Group is required"));
+  if (!host.host.trim()) return setStatus(t("Host is required"));
+  if (!String(host.port).trim()) return setStatus(t("Port is required"));
   if (!host.identityId) {
-    if (!host.username.trim()) return setStatus("Username is required");
-    if (host.auth.kind === "keyFile" && !host.auth.path.trim()) return setStatus("Private key path is required");
-    if (host.auth.kind === "keyRef" && !host.auth.keyId) return setStatus("Choose a key from Keychain first");
-    if (host.auth.kind === "password" && !host.auth.password) return setStatus("Password is required");
+    if (!host.username.trim()) return setStatus(t("Username is required"));
+    if (host.auth.kind === "keyFile" && !host.auth.path.trim()) return setStatus(t("Private key path is required"));
+    if (host.auth.kind === "keyRef" && !host.auth.keyId) return setStatus(t("Choose a key from Keychain first"));
+    if (host.auth.kind === "password" && !host.auth.password) return setStatus(t("Password is required"));
   }
 
   if (state.editingIndex >= 0) {
@@ -1385,7 +1505,7 @@ async function saveEditor(options = {}) {
   await saveHosts();
   if (!options.keepOpen) closeEditor();
   pushLog("Host", `Saved ${host.name}.`, host);
-  setStatus("Host saved");
+  setStatus(t("Host saved"));
   return host;
 }
 
@@ -1416,11 +1536,11 @@ async function deleteHost(hostId) {
   if (index < 0) return;
   const host = state.hosts[index];
   const confirmed = await requestDeleteConfirmation({
-    title: "Remove a host",
-    message: "You are going to remove this host:",
+    title: t("Remove a host"),
+    message: t("You are going to remove this host:"),
     item: {
       type: "host",
-      title: host.name || host.host || "Unnamed host",
+      title: host.name || host.host || t("Unnamed host"),
       subtitle: `ssh, ${host.username || "user"}`,
       os: host.os,
     },
@@ -1432,7 +1552,7 @@ async function deleteHost(hostId) {
   state.selectedHostId = state.hosts[Math.min(index, state.hosts.length - 1)].id;
   await saveHosts();
   pushLog("Host", `Deleted ${host.name}.`, host);
-  setStatus("Host deleted");
+  setStatus(t("Host deleted"));
   render();
 }
 
@@ -1449,7 +1569,7 @@ async function duplicateHost(hostId) {
   state.selectedGroup = null;
   await saveHosts();
   pushLog("Host", `Duplicated ${host.name}.`, copy);
-  setStatus("Host duplicated");
+  setStatus(t("Host duplicated"));
 }
 
 function hostsInGroup(group) {
@@ -1461,7 +1581,7 @@ function openGroup(group) {
   state.openedGroup = group;
   state.selectedHostId = null;
   closeEditor();
-  setStatus(`Opened group ${group}`);
+  setStatus(t("Opened group {0}", group));
 }
 
 function showAllHosts() {
@@ -1472,7 +1592,7 @@ function showAllHosts() {
 
 function connectGroup(group) {
   const hosts = hostsInGroup(group);
-  if (!hosts.length) return setStatus(`Group ${group} has no hosts`);
+  if (!hosts.length) return setStatus(t("Group {0} has no hosts", group));
   state.selectedGroup = group;
   state.openedGroup = group;
   if (hosts.length > 1) pushLog("Group", `Connecting first host in ${group}; multi-tab group sessions are not enabled yet.`);
@@ -1483,17 +1603,17 @@ async function removeGroup(group) {
   const affectedHosts = hostsInGroup(group);
   const groupName = normalizeGroupPath(group).split("/").filter(Boolean).slice(-1)[0] || group;
   const confirmed = await requestDeleteConfirmation({
-    title: affectedHosts.length ? "Remove a group and hosts" : "Remove a group",
-    message: "You are going to remove this group:",
+    title: affectedHosts.length ? t("Remove a group and hosts") : t("Remove a group"),
+    message: t("You are going to remove this group:"),
     item: {
       type: "group",
       title: groupName,
-      subtitle: `${affectedHosts.length} Host${affectedHosts.length === 1 ? "" : "s"}`,
+      subtitle: hostCountLabel(affectedHosts.length),
     },
-    affectedLabel: "And these hosts:",
+    affectedLabel: t("And these hosts:"),
     affected: affectedHosts.map((host) => ({
       type: "host",
-      title: host.name || host.host || "Unnamed host",
+      title: host.name || host.host || t("Unnamed host"),
       subtitle: `ssh, ${host.username || "user"}`,
       os: host.os,
     })),
@@ -1516,7 +1636,7 @@ async function removeGroup(group) {
   state.selectedHostId = state.hosts[0]?.id ?? null;
   await saveHosts();
   pushLog("Group", `Removed ${group}.`);
-  setStatus("Group removed");
+  setStatus(t("Group removed"));
   render();
 }
 
@@ -1528,12 +1648,12 @@ async function saveGroupDetails() {
   if (!state.editingGroup) return;
   readGroupDetails();
   const profile = normalizeGroupProfile(state.editingGroup.originalName, state.editingGroup);
-  if (!profile.name.trim()) return setStatus("Group name is required");
+  if (!profile.name.trim()) return setStatus(t("Group name is required"));
   if (profile.useCredentials) {
-    if (!profile.username.trim()) return setStatus("Group username is required");
-    if (profile.auth.kind === "password" && !profile.auth.password) return setStatus("Group password is required");
-    if (profile.auth.kind === "keyFile" && !profile.auth.path.trim()) return setStatus("Group key path is required");
-    if (profile.auth.kind === "keyRef" && !profile.auth.keyId) return setStatus("Choose a group key from Keychain first");
+    if (!profile.username.trim()) return setStatus(t("Group username is required"));
+    if (profile.auth.kind === "password" && !profile.auth.password) return setStatus(t("Group password is required"));
+    if (profile.auth.kind === "keyFile" && !profile.auth.path.trim()) return setStatus(t("Group key path is required"));
+    if (profile.auth.kind === "keyRef" && !profile.auth.keyId) return setStatus(t("Choose a group key from Keychain first"));
   }
 
   const oldName = profile.originalName || profile.name;
@@ -1584,7 +1704,7 @@ async function saveGroupDetails() {
   await saveHosts();
   closeEditor();
   pushLog("Group", `Saved ${profile.name}.`);
-  setStatus("Group saved");
+  setStatus(t("Group saved"));
 }
 
 function saveKeyDetails(options = {}) {
@@ -1594,7 +1714,7 @@ function saveKeyDetails(options = {}) {
   if (state.editingKeyIndex < 0 && keyIsBlank(key)) {
     state.selectedKeyId = null;
     closeEditor();
-    setStatus("Blank key discarded");
+    setStatus(t("Blank key discarded"));
     return;
   }
 
@@ -1609,7 +1729,7 @@ function saveKeyDetails(options = {}) {
   state.selectedKeyId = key.id;
   state.editingKey = clone(key);
   persistKeychain();
-  setStatus("Key saved");
+  setStatus(t("Key saved"));
 }
 
 function readKeyGenerator() {
@@ -1649,11 +1769,11 @@ async function generateAndSaveKey() {
     state.keyGenerating = false;
     persistKeychain();
     pushLog("Keychain", `Generated ${keyLabel(key)}.`);
-    setStatus(`Generated ${keyLabel(key)}`);
+    setStatus(t("Generated {0}", keyLabel(key)));
     render();
   } catch (error) {
     state.keyGenerating = false;
-    setStatus(`Generate key failed: ${error}`);
+    setStatus(t("Generate key failed: {0}", error));
     render();
   }
 }
@@ -1663,12 +1783,12 @@ async function removeKey(keyId) {
   if (index < 0) return;
   const key = state.keys[index];
   const confirmed = await requestDeleteConfirmation({
-    title: "Remove key",
-    message: "Are you sure you want to remove this key?",
+    title: t("Remove key"),
+    message: t("Are you sure you want to remove this key?"),
     item: {
       type: "key",
-      title: keyLabel(key) || "Unnamed key",
-      subtitle: `Type ${keyType(key)}`,
+      title: keyLabel(key) || t("Unnamed key"),
+      subtitle: keyType(key),
     },
   });
   if (!confirmed) return;
@@ -1679,7 +1799,7 @@ async function removeKey(keyId) {
   if (state.editingKey?.id === keyId) closeEditor();
   persistKeychain();
   pushLog("Keychain", `Removed ${keyLabel(key)}.`);
-  setStatus("Key removed");
+  setStatus(t("Key removed"));
   render();
 }
 
@@ -1759,7 +1879,7 @@ function saveSnippetDetails() {
   if (snippetIsBlank(snippet)) {
     state.selectedSnippetId = null;
     closeEditor();
-    setStatus("Blank snippet discarded");
+    setStatus(t("Blank snippet discarded"));
     return;
   }
 
@@ -1774,7 +1894,7 @@ function saveSnippetDetails() {
   state.selectedSnippetId = snippet.id;
   state.editingSnippet = clone(snippet);
   persistSnippets();
-  setStatus("Snippet saved");
+  setStatus(t("Snippet saved"));
 }
 
 async function removeSnippet(snippetId) {
@@ -1782,11 +1902,11 @@ async function removeSnippet(snippetId) {
   if (index < 0) return;
   const snippet = state.snippets[index];
   const confirmed = await requestDeleteConfirmation({
-    title: "Remove snippet",
-    message: "Are you sure you want to remove this snippet?",
+    title: t("Remove snippet"),
+    message: t("Are you sure you want to remove this snippet?"),
     item: {
       type: "snippet",
-      title: snippetLabel(snippet) || "Unnamed snippet",
+      title: snippetLabel(snippet) || t("Unnamed snippet"),
       subtitle: snippet.script || "",
     },
   });
@@ -1798,7 +1918,7 @@ async function removeSnippet(snippetId) {
   if (state.editingSnippet?.id === snippetId) closeEditor();
   persistSnippets();
   pushLog("Snippets", `Removed ${snippetLabel(snippet)}.`);
-  setStatus("Snippet removed");
+  setStatus(t("Snippet removed"));
   render();
 }
 
@@ -1875,7 +1995,7 @@ function saveHistoryAsSnippet(index) {
   persistSnippets();
   state.shellHistorySavingIndex = -1;
   pushLog("Snippets", `Saved snippet from history: ${entry.command}`);
-  setStatus("Snippet saved from history");
+  setStatus(t("Snippet saved from history"));
 }
 
 async function stopExistingShell(nextSessionId = "") {
@@ -1897,7 +2017,7 @@ async function openLocalPowershell() {
   state.sessionKind = "local";
   state.shellHealthy = false;
   const termName = isMacOS() ? "Terminal (zsh)" : "PowerShell";
-  state.status = `Opening local ${termName}...`;
+  state.status = t("Opening local {0}...", termName);
   state.view = "localTerminal";
   state.commandInput = "";
   state.connection = null;
@@ -1919,7 +2039,7 @@ async function openLocalPowershell() {
     startShellPolling();
     await pollShellOutput();
     pushLog("Terminal", `Opened ${summary.banner || termName}.`);
-    setStatus(`${summary.banner || termName} ${t("connected at")} ${summary.connectedAt}`, {
+    setStatus(t("{0} connected at {1}", summary.banner || termName, summary.connectedAt), {
       terminalBottom: true,
       focusTerminal: true,
     });
@@ -1927,22 +2047,22 @@ async function openLocalPowershell() {
     state.shellHealthy = false;
     appendTerminalOutput(`[vps-studio] local terminal failed: ${error}\r\n`);
     pushLog("Terminal", `Open local terminal failed: ${error}`);
-    setStatus(`Open local terminal failed: ${error}`, { focusTerminal: true });
+    setStatus(t("Open local terminal failed: {0}", error), { focusTerminal: true });
   }
 }
 
 async function connectHost(host, ignoreKnownHosts = false) {
   if (!host) return;
   const profile = profileForConnection(host);
-  if (profile.auth.kind === "keyRef") return setStatus("Choose a key from Keychain first");
+  if (profile.auth.kind === "keyRef") return setStatus(t("Choose a key from Keychain first"));
   if (profile.auth.kind === "keyData" && !profile.auth.privateKey.trim()) {
-    return setStatus("Selected Keychain item has no private key");
+    return setStatus(t("Selected Keychain item has no private key"));
   }
   await stopExistingShell(profile.id);
   state.activeHost = profile;
   state.activeShellId = state.activeHost.id;
   state.sessionKind = "ssh";
-  state.status = `Connecting to ${profile.name}...`;
+  state.status = t("Connecting to {0}...", profile.name);
   state.view = "session";
   state.commandInput = "";
   state.metrics = null;
@@ -1976,7 +2096,7 @@ async function connectHost(host, ignoreKnownHosts = false) {
       storedHost.lastConnected = Date.now();
       saveHosts();
     }
-    setStatus(`${t("Connected at ")}${summary.connectedAt}`, { terminalBottom: true, focusTerminal: true });
+    setStatus(t("Connected at {0}", summary.connectedAt), { terminalBottom: true, focusTerminal: true });
     refreshMetrics();
     refreshSftp(state.remotePath);
   } catch (error) {
@@ -1988,7 +2108,7 @@ async function connectHost(host, ignoreKnownHosts = false) {
     }
     appendTerminalOutput(`[vps-studio] connection failed: ${error}\r\n`);
     pushLog("SSH", `Connection failed: ${error}`, profile);
-    setStatus(`Connection failed: ${error}`, { terminalBottom: true, focusCommand: true });
+    setStatus(t("Connection failed: {0}", error), { terminalBottom: true, focusCommand: true });
   }
 }
 
@@ -1996,7 +2116,7 @@ async function reconnectShell(reason = "") {
   if (state.sessionKind !== "ssh" || !state.activeHost || shellReconnecting) return false;
   shellReconnecting = true;
   const host = state.activeHost;
-  state.status = reason ? `Reconnecting shell: ${reason}` : "Reconnecting shell...";
+  state.status = reason ? t("Reconnecting shell: {0}", reason) : t("Reconnecting shell...");
   appendTerminalOutput(`\n[vps-studio] reconnecting interactive shell...\n`);
   try {
     await call("start_shell", {
@@ -2007,12 +2127,12 @@ async function reconnectShell(reason = "") {
     state.activeShellId = host.id;
     startShellPolling();
     await pollShellOutput();
-    state.status = "Interactive shell reconnected";
+    state.status = t("Interactive shell reconnected");
     pushLog("SSH", "Interactive shell reconnected.", host);
     render({ terminalBottom: true, focusTerminal: true });
     return true;
   } catch (error) {
-    state.status = `Reconnect failed: ${error}`;
+    state.status = t("Reconnect failed: {0}", error);
     pushLog("SSH", `Reconnect failed: ${error}`, host);
     render({ terminalBottom: true, focusTerminal: true });
     return false;
@@ -2044,7 +2164,7 @@ async function disconnect() {
   state.terminal = "";
   terminalReset();
   state.commandInput = "";
-  setStatus(wasLocal ? "Local terminal closed" : t("Disconnected"));
+  setStatus(wasLocal ? t("Local terminal closed") : t("Disconnected"));
 }
 
 function appendTerminal(text) {
@@ -2055,7 +2175,7 @@ function appendTerminal(text) {
 function appendTerminalOutput(text) {
   if (String(text || "").includes("[ssh channel closed]")) {
     state.shellHealthy = false;
-    state.status = "SSH channel closed";
+    state.status = t("SSH channel closed");
     render({ focusTerminal: true });
   }
   terminalWrite(text);
@@ -2104,7 +2224,7 @@ function setupTerminalEvents() {
   ).catch((error) => {
     terminalEventsRegistered = false;
     pushLog("App", `Terminal event listener failed: ${error}`);
-    state.status = `Terminal listener failed: ${error}`;
+    state.status = t("Terminal listener failed: {0}", error);
     render();
   });
 }
@@ -2137,7 +2257,7 @@ async function sendShellInput(data) {
         pushLog("SSH", `Retry send failed: ${retryError}`, state.activeHost);
       }
     }
-    setStatus(`Send failed: ${error}`, { focusTerminal: true });
+    setStatus(t("Send failed: {0}", error), { focusTerminal: true });
   }
 }
 
@@ -2511,7 +2631,7 @@ async function writeClipboardText(text) {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      setStatus("Copy failed");
+      setStatus(t("Copy failed"));
     }
   }
 }
@@ -3053,7 +3173,7 @@ async function refreshMetrics() {
 
     refreshMonitorPanel();
   } catch (error) {
-    state.status = `Metrics failed: ${error}`;
+    state.status = t("Metrics failed: {0}", error);
     render();
   }
 }
@@ -3078,7 +3198,7 @@ async function refreshSftp(path = state.remotePath) {
     state.remoteEntries = dir.entries || [];
     render();
   } catch (error) {
-    state.status = `SFTP failed: ${error}`;
+    state.status = t("SFTP failed: {0}", error);
     render();
   }
 }
@@ -3097,9 +3217,9 @@ async function openRemote(entry) {
     state.watchedFiles = state.watchedFiles.filter((file) => file.remotePath !== watched.remotePath);
     state.watchedFiles.push(watched);
     pushLog("SFTP", `Opened ${entry.path}.`, state.activeHost);
-    setStatus(`Opened ${entry.name}`);
+    setStatus(t("Opened {0}", entry.name));
   } catch (error) {
-    setStatus(`Open failed: ${error}`);
+    setStatus(t("Open failed: {0}", error));
   }
 }
 
@@ -3115,10 +3235,10 @@ async function uploadWatched(file) {
     file.dirty = false;
     file.originalModifiedMs = file.lastSeenModifiedMs;
     pushLog("SFTP", `Uploaded ${file.remotePath}.`, state.activeHost);
-    setStatus(`Uploaded ${file.remotePath}`);
+    setStatus(t("Uploaded {0}", file.remotePath));
     await refreshSftp();
   } catch (error) {
-    setStatus(`Upload failed: ${error}`);
+    setStatus(t("Upload failed: {0}", error));
   }
 }
 
@@ -3132,17 +3252,17 @@ async function createFolder() {
     pushLog("SFTP", `Created folder ${name}.`, state.activeHost);
     await refreshSftp();
   } catch (error) {
-    setStatus(`Create folder failed: ${error}`);
+    setStatus(t("Create folder failed: {0}", error));
   }
 }
 
 async function deleteRemote(entry) {
-  const name = String(entry.path || "").split("/").filter(Boolean).slice(-1)[0] || entry.path || "Remote item";
+  const name = String(entry.path || "").split("/").filter(Boolean).slice(-1)[0] || entry.path || t("Remote item");
   // A link is always removed as a file (unlink), never as its target folder.
   const asFolder = entry.isDir && !entry.isLink;
   const confirmed = await requestDeleteConfirmation({
-    title: asFolder ? "Remove folder" : "Remove file",
-    message: `Are you sure you want to remove this ${asFolder ? "folder" : "file"}?`,
+    title: asFolder ? t("Remove folder") : t("Remove file"),
+    message: asFolder ? t("Are you sure you want to remove this folder?") : t("Are you sure you want to remove this file?"),
     item: {
       type: asFolder ? "folder" : "file",
       title: name,
@@ -3161,7 +3281,7 @@ async function deleteRemote(entry) {
     pushLog("SFTP", `Deleted ${entry.path}.`, state.activeHost);
     await refreshSftp();
   } catch (error) {
-    setStatus(`Delete failed: ${error}`);
+    setStatus(t("Delete failed: {0}", error));
   }
 }
 
@@ -3246,21 +3366,21 @@ function renderDeleteDialog() {
     <div class="delete-dialog-overlay" data-delete-backdrop>
       <section class="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteDialogTitle">
         <header class="delete-dialog-header">
-          <h2 id="deleteDialogTitle">${escapeHtml(dialog.title || "Remove item")}</h2>
-          <button class="icon-btn delete-dialog-close" data-action="cancel-delete-dialog" title="Close" aria-label="Close">${closeIcon()}</button>
+          <h2 id="deleteDialogTitle">${escapeHtml(dialog.title || t("Remove item"))}</h2>
+          <button class="icon-btn delete-dialog-close" data-action="cancel-delete-dialog" title="${t("Close")}" aria-label="${t("Close")}">${closeIcon()}</button>
         </header>
         <div class="delete-dialog-body">
-          <p>${escapeHtml(dialog.message || "This action cannot be undone.")}</p>
+          <p>${escapeHtml(dialog.message || t("This action cannot be undone."))}</p>
           ${dialog.item ? renderDeleteDialogItem(dialog.item) : ""}
           ${
             dialog.affected?.length
-              ? `<p class="delete-dialog-affected-label">${escapeHtml(dialog.affectedLabel || "And these items:")}</p>
+              ? `<p class="delete-dialog-affected-label">${escapeHtml(dialog.affectedLabel || t("And these items:"))}</p>
                  <div class="delete-dialog-affected">${dialog.affected.map(renderDeleteDialogItem).join("")}</div>`
               : ""
           }
       </div>
       <footer class="delete-dialog-footer">
-        <button class="btn delete-dialog-remove" data-action="confirm-delete-dialog"><span>Remove</span></button>
+        <button class="btn delete-dialog-remove" data-action="confirm-delete-dialog"><span>${t("Remove")}</span></button>
       </footer>
       </section>
     </div>
@@ -3514,15 +3634,19 @@ function renderGroupBreadcrumb() {
   return `<nav class="breadcrumb">${crumbs.join(`<span class="crumb-sep">›</span>`)}</nav>`;
 }
 
+function hostCountLabel(count) {
+  return count === 1 ? t("{0} Host", count) : t("{0} Hosts", count);
+}
+
 function renderGroupCard([group, count]) {
   return `
     <article class="group-card ${state.selectedGroup === group ? "active" : ""} ${state.openedGroup === group ? "opened" : ""}" data-group="${escapeAttr(group)}">
       <div class="host-mark blue">${groupIcon()}</div>
       <div>
         <div class="group-title">${escapeHtml(groupLabel(group))}</div>
-        <div class="group-meta">${count} ${t("Hosts")}</div>
+        <div class="group-meta">${escapeHtml(hostCountLabel(count))}</div>
       </div>
-      <button class="card-edit" title="Edit group" data-action="edit-group" data-group="${escapeAttr(group)}">${pencilIcon()}</button>
+      <button class="card-edit" title="${t("Edit group")}" data-action="edit-group" data-group="${escapeAttr(group)}">${pencilIcon()}</button>
     </article>
   `;
 }
@@ -3546,7 +3670,7 @@ function renderHostCard(host) {
         <div class="host-meta">ssh, ${escapeHtml(host.username)}</div>
       </div>
       <div class="host-actions">
-        <button class="card-edit" title="Edit host" data-action="edit-host" data-host-id="${escapeAttr(host.id)}">${pencilIcon()}</button>
+        <button class="card-edit" title="${t("Edit host")}" data-action="edit-host" data-host-id="${escapeAttr(host.id)}">${pencilIcon()}</button>
       </div>
     </article>
   `;
@@ -3560,15 +3684,15 @@ function renderContextMenu() {
     return `
       <div class="context-menu compact" style="left:${left}px;top:${top}px">
         <button data-action="ctx-edit-snippet">${pencilIcon()} <span>${t("Edit")}</span></button>
-        <button class="danger-text" data-action="ctx-remove-snippet">${trashIcon()} <span>Remove</span></button>
+        <button class="danger-text" data-action="ctx-remove-snippet">${trashIcon()} <span>${t("Remove")}</span></button>
       </div>
     `;
   }
   if (menu.kind === "known_host") {
     return `
       <div class="context-menu compact" style="left:${left}px;top:${top}px">
-        <button data-action="ctx-convert-known-host">${plugIcon()} <span>Convert to Host</span></button>
-        <button class="danger-text" data-action="ctx-remove-known-host">${trashIcon()} <span>Remove</span></button>
+        <button data-action="ctx-convert-known-host">${serverIcon()} <span>${t("Convert to Host")}</span></button>
+        <button class="danger-text" data-action="ctx-remove-known-host">${trashIcon()} <span>${t("Remove")}</span></button>
       </div>
     `;
   }
@@ -3576,7 +3700,7 @@ function renderContextMenu() {
     return `
       <div class="context-menu compact" style="left:${left}px;top:${top}px">
         <button data-action="ctx-edit-key">${pencilIcon()} <span>${t("Edit")}</span></button>
-        <button class="danger-text" data-action="ctx-remove-key">${trashIcon()} <span>Remove</span></button>
+        <button class="danger-text" data-action="ctx-remove-key">${trashIcon()} <span>${t("Remove")}</span></button>
       </div>
     `;
   }
@@ -3584,7 +3708,7 @@ function renderContextMenu() {
     return `
       <div class="context-menu compact" style="left:${left}px;top:${top}px">
         <button data-action="ctx-edit-identity">${pencilIcon()} <span>${t("Edit")}</span></button>
-        <button class="danger-text" data-action="ctx-remove-identity">${trashIcon()} <span>Remove</span></button>
+        <button class="danger-text" data-action="ctx-remove-identity">${trashIcon()} <span>${t("Remove")}</span></button>
       </div>
     `;
   }
@@ -3592,17 +3716,17 @@ function renderContextMenu() {
     return `
       <div class="context-menu" style="left:${left}px;top:${top}px">
         <button data-action="ctx-connect-group">${plugIcon()} <span>${t("Connect")}</span></button>
-        <button data-action="ctx-edit-group">${pencilIcon()} <span>Edit Group Details</span></button>
-        <button class="danger-text" data-action="ctx-remove-group">${trashIcon()} <span>Remove</span></button>
+        <button data-action="ctx-edit-group">${pencilIcon()} <span>${t("Edit Group Details")}</span></button>
+        <button class="danger-text" data-action="ctx-remove-group">${trashIcon()} <span>${t("Remove")}</span></button>
       </div>
     `;
   }
   return `
     <div class="context-menu" style="left:${left}px;top:${top}px">
       <button data-action="ctx-connect-host">${plugIcon()} <span>${t("Connect")}</span></button>
-      <button data-action="ctx-edit-host">${pencilIcon()} <span>Edit Host Details</span></button>
-      <button data-action="ctx-duplicate-host">${copyIcon()} <span>Duplicate</span></button>
-      <button class="danger-text" data-action="ctx-remove-host">${trashIcon()} <span>Remove</span></button>
+      <button data-action="ctx-edit-host">${pencilIcon()} <span>${t("Edit Host Details")}</span></button>
+      <button data-action="ctx-duplicate-host">${copyIcon()} <span>${t("Duplicate")}</span></button>
+      <button class="danger-text" data-action="ctx-remove-host">${trashIcon()} <span>${t("Remove")}</span></button>
     </div>
   `;
 }
@@ -3671,6 +3795,11 @@ function searchIcon() {
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>`;
 }
 
+
+// Material Design "dns" (server) icon
+function serverIcon() {
+  return `<svg class="md-filled-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13H5c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h14c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zm-1 6H6v-4h12v4zM7 18h2v-2H7v2zM19 3H5c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h14c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zm-1 6H6V5h12v4zM7 8h2V6H7v2z"/></svg>`;
+}
 
 function plugIcon() {
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v5M16 3v5M7 8h10v3a5 5 0 0 1-10 0V8Z"/><path d="M12 16v5"/></svg>`;
@@ -3814,8 +3943,8 @@ function renderKeyMenu() {
 
 function renderSortMenu() {
   const modes = [
-    { id: "a-z", label: "A-z", icon: sortAzIcon() },
-    { id: "z-a", label: "Z-a", icon: sortZaIcon() },
+    { id: "a-z", label: "a-z", icon: sortAzIcon() },
+    { id: "z-a", label: "z-a", icon: sortZaIcon() },
     { id: "newest", label: "Newest to oldest", icon: calendarDescIcon() },
     { id: "oldest", label: "Oldest to newest", icon: calendarAscIcon() },
   ];
@@ -3842,7 +3971,7 @@ function renderKeyCard(key) {
         <div class="host-name truncate-text">${escapeHtml(keyLabel(key))}</div>
         <div class="host-meta truncate-text">${getKeyTypeDisplay(key)}</div>
       </div>
-      <button class="card-edit" title="Edit key" data-action="edit-key" data-key-id="${escapeAttr(key.id)}">${pencilIcon()}</button>
+      <button class="card-edit" title="${t("Edit key")}" data-action="edit-key" data-key-id="${escapeAttr(key.id)}">${pencilIcon()}</button>
     </article>
   `;
 }
@@ -3870,7 +3999,7 @@ function identityIcon() {
 }
 
 function renderIdentityCard(ident) {
-  const authText = ident.auth?.kind === "password" ? "Auth password" : "Auth key";
+  const authText = ident.auth?.kind === "password" ? t("Auth password") : t("Auth key");
   return `
     <article class="mini-card identity-card ${state.selectedIdentityId === ident.id ? "active" : ""}" data-identity-id="${escapeAttr(ident.id)}">
       <div class="mini-icon" style="background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);">${identityIcon()}</div>
@@ -3878,7 +4007,7 @@ function renderIdentityCard(ident) {
         <div class="host-name truncate-text">${escapeHtml(identityLabel(ident))}</div>
         <div class="host-meta truncate-text">${authText}</div>
       </div>
-      <button class="card-edit" title="Edit identity" data-action="edit-identity" data-identity-id="${escapeAttr(ident.id)}">${pencilIcon()}</button>
+      <button class="card-edit" title="${t("Edit identity")}" data-action="edit-identity" data-identity-id="${escapeAttr(ident.id)}">${pencilIcon()}</button>
     </article>
   `;
 }
@@ -3925,7 +4054,7 @@ function renderSnippetCard(snippet) {
         <div class="host-name truncate-text ${!hasLabel ? 'code-font' : ''}">${escapeHtml(title)}</div>
         ${subtitle ? `<div class="host-meta truncate-text code-font">${escapeHtml(subtitle)}</div>` : ""}
       </div>
-      <button class="card-edit" title="Edit snippet" data-action="edit-snippet" data-snippet-id="${escapeAttr(snippet.id)}">${pencilIcon()}</button>
+      <button class="card-edit" title="${t("Edit snippet")}" data-action="edit-snippet" data-snippet-id="${escapeAttr(snippet.id)}">${pencilIcon()}</button>
     </article>
   `;
 }
@@ -4013,7 +4142,7 @@ function renderLogRow(row) {
         </div>
         <div style="display:flex; flex-direction:column; gap:2px;">
           <strong style="color:var(--text); font-size:13px; font-weight:600;">${t("System Event")}</strong>
-          <span style="font-size:12px; color:var(--muted);">${escapeHtml(row.message)}</span>
+          <span style="font-size:12px; color:var(--muted);">${escapeHtml(t(row.message))}</span>
         </div>
       </div>
     `;
@@ -4097,10 +4226,10 @@ function renderTerminalText() {
 function renderNetworkChart() {
   const history = state.metricsHistory || [];
   const metrics = state.metrics;
-  if (!metrics || !history.length) return `<div class="tiny" style="padding:12px;">Waiting for network data...</div>`;
+  if (!metrics || !history.length) return `<div class="tiny" style="padding:12px;">${t("Waiting for network data...")}</div>`;
 
   const devices = (metrics.netDevices || []).filter((d) => d.name !== "lo");
-  if (!devices.length) return `<div class="tiny" style="padding:12px;">No network devices found</div>`;
+  if (!devices.length) return `<div class="tiny" style="padding:12px;">${t("No network devices found")}</div>`;
 
   let iface = state.selectedNetInterface;
   if (!iface || !devices.find((d) => d.name === iface)) {
@@ -4228,7 +4357,7 @@ function renderMonitor() {
       ${(metrics?.disks || [])
         .slice(0, 8)
         .map((disk) => `<div class="kv"><span>${escapeHtml(disk.mount)}</span><strong>${humanBytes(disk.used)} / ${humanBytes(disk.total)}</strong></div>`)
-        .join("") || `<div class="tiny">Waiting for disk data...</div>`}
+        .join("") || `<div class="tiny">${t("Waiting for disk data...")}</div>`}
     </div>
   `;
 }
@@ -4239,10 +4368,10 @@ function renderUploadPrompts() {
     .map(
       (file) => `
       <div class="upload-strip">
-        <span>Local edits detected: <strong>${escapeHtml(file.remotePath)}</strong></span>
+        <span>${t("Local edits detected:")} <strong>${escapeHtml(file.remotePath)}</strong></span>
         <span>
-          <button class="btn primary" data-action="upload-file" data-remote-path="${escapeAttr(file.remotePath)}">Upload</button>
-          <button class="btn ghost" data-action="discard-file" data-remote-path="${escapeAttr(file.remotePath)}">Discard</button>
+          <button class="btn primary" data-action="upload-file" data-remote-path="${escapeAttr(file.remotePath)}">${t("Upload")}</button>
+          <button class="btn ghost" data-action="discard-file" data-remote-path="${escapeAttr(file.remotePath)}">${t("Discard")}</button>
         </span>
       </div>
     `,
@@ -4255,7 +4384,7 @@ function renderSftp() {
   const entries = state.remoteEntries.filter((entry) => !q || entry.name.toLowerCase().includes(q));
   return `
     <div class="sftp-toolbar">
-      <button class="icon-btn" data-action="sftp-up" title="Parent folder">&lt;</button>
+      <button class="icon-btn" data-action="sftp-up" title="${t("Parent folder")}">&lt;</button>
       <div class="path-pill">${escapeHtml(state.remotePath)}</div>
       <div class="search"><input id="sftpFilter" value="${escapeAttr(state.sftpFilter)}" placeholder="${t('Filter files...')}" /></div>
       <input id="newFolderName" class="folder-input" placeholder="${t('Folder name')}" />
@@ -4287,7 +4416,7 @@ function renderSftpRow(entry) {
       <td>${formatTime(entry.modified)}</td>
       <td>${formatMode(entry.permissions)}</td>
       <td>${escapeHtml(entry.owner || "-")}</td>
-      <td><button class="icon-btn" title="Delete" data-action="delete-remote" data-path="${escapeAttr(entry.path)}">${t("Del")}</button></td>
+      <td><button class="icon-btn" title="${t("Delete")}" data-action="delete-remote" data-path="${escapeAttr(entry.path)}">${t("Del")}</button></td>
     </tr>
   `;
 }
@@ -4867,9 +4996,9 @@ async function copyKeyField(fieldName) {
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
-    setStatus("Copied key field");
+    setStatus(t("Copied key field"));
   } catch {
-    setStatus("Copy failed");
+    setStatus(t("Copy failed"));
   }
 }
 
@@ -4886,9 +5015,9 @@ function importKeyFile(file) {
     state.editingKey = key;
     state.skipFormSync = true;
     saveKeyDetails({ readForm: false });
-    setStatus(`Imported ${file.name}`);
+    setStatus(t("Imported {0}", file.name));
   };
-  reader.onerror = () => setStatus(`Import failed: ${reader.error?.message || "file read error"}`);
+  reader.onerror = () => setStatus(t("Import failed: {0}", reader.error?.message || t("file read error")));
   reader.readAsText(file);
 }
 
@@ -5102,12 +5231,12 @@ function bindEvents() {
         state.contextMenu = null;
         if (!identity) break;
         const confirmed = await requestDeleteConfirmation({
-          title: "Remove identity",
-          message: "Are you sure you want to remove this identity?",
+          title: t("Remove identity"),
+          message: t("Are you sure you want to remove this identity?"),
           item: {
             type: "identity",
-            title: identity.label || identity.username || "Unnamed identity",
-            subtitle: identity.username ? `ssh, ${identity.username}` : "SSH identity",
+            title: identity.label || identity.username || t("Unnamed identity"),
+            subtitle: identity.username ? `ssh, ${identity.username}` : t("SSH identity"),
           },
         });
         if (!confirmed) break;
@@ -5118,7 +5247,7 @@ function bindEvents() {
         });
         persistIdentities();
         await saveHosts();
-        setStatus("Identity removed");
+        setStatus(t("Identity removed"));
         render();
         break;
       }
@@ -5126,7 +5255,7 @@ function bindEvents() {
           if (!state.editingIdentity) break;
           readIdentityForm();
           if (!state.editingIdentity.username.trim()) {
-            setStatus("Username is required");
+            setStatus(t("Username is required"));
             break;
           }
           if (state.editingIdentityIndex >= 0) {
@@ -5138,7 +5267,7 @@ function bindEvents() {
           state.selectedIdentityId = state.editingIdentity.id;
           persistIdentities();
           closeEditor();
-          setStatus("Identity saved");
+          setStatus(t("Identity saved"));
           break;
         }
         case "ident-auth-key":
@@ -5203,7 +5332,7 @@ function bindEvents() {
         case "untrusted-add": {
           const p = state.untrustedHostPrompt;
           state.untrustedHostPrompt = null;
-          setStatus("Saving known host...");
+          setStatus(t("Saving known host..."));
           render();
           try {
             await call("add_known_host", { host: p.host.host, port: p.host.port, fingerprint: p.fingerprint });
@@ -5290,10 +5419,10 @@ function bindEvents() {
           break;
         case "new-identity":
           closeMenus();
-          setStatus("SSH identity support is planned for a later milestone.");
+          setStatus(t("SSH identity support is planned for a later milestone."));
           break;
         case "certificate-info":
-          setStatus("SSH certificate support is planned for a later milestone.");
+          setStatus(t("SSH certificate support is planned for a later milestone."));
           break;
         case "new-snippet":
           closeMenus();
@@ -5368,18 +5497,18 @@ function bindEvents() {
       state.contextMenu = null;
       if (!kh) break;
       const confirmed = await requestDeleteConfirmation({
-        title: "Remove known host",
-        message: "Are you sure you want to remove this known host?",
+        title: t("Remove known host"),
+        message: t("Are you sure you want to remove this known host?"),
         item: {
           type: "host",
-          title: kh.host || "Unknown host",
-          subtitle: kh.fingerprint || `SSH port ${kh.port || 22}`,
+          title: kh.host || t("Unknown host"),
+          subtitle: kh.fingerprint || t("SSH port {0}", kh.port || 22),
         },
       });
       if (!confirmed) break;
       state.knownHosts = state.knownHosts.filter((host) => host.id !== kh.id);
       await call("save_known_hosts", { hosts: state.knownHosts });
-      setStatus("Known host removed");
+      setStatus(t("Known host removed"));
       render();
       break;
     }
@@ -5712,7 +5841,7 @@ async function copySnippetCommand(hostId, index) {
   if (!snippet) return;
   try {
     await navigator.clipboard.writeText(snippet.command);
-    setStatus(`Copied ${snippet.name}`);
+    setStatus(t("Copied {0}", snippet.name));
   } catch {
     setStatus(snippet.command);
   }

@@ -1388,6 +1388,12 @@ tr:hover td {
   color: var(--md-sys-color-error);
 }
 
+/* Material Design filled icons (e.g. dns) are fills, not strokes */
+.context-menu button svg.md-filled-icon {
+  fill: currentColor;
+  stroke: none;
+}
+
 .context-menu button > span {
   flex: 1;
   min-width: 0;
