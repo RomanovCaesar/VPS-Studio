@@ -2971,6 +2971,7 @@ function render(options = {}) {
     </div>
     ${renderDeleteDialog()}
   `;
+  app.querySelectorAll("input:not([type=checkbox]):not([type=file])").forEach(el => el.setAttribute("autocomplete", "off"));
   bindEvents();
   if (terminalViewActive()) mountXterm(shouldRestoreTerminalFocus);
 
