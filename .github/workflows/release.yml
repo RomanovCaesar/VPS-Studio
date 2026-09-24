@@ -41,7 +41,7 @@ jobs:
         run: |
           $tag = "${{ inputs.tag_name || github.ref_name }}"
           if (-not $tag -or $tag -eq "main" -or $tag -eq "master") {
-              $tag = "v0.3.0"
+              $tag = "v0.3.1"
           }
           $versionWithV = if ($tag.StartsWith("v")) { $tag } else { "v$tag" }
           $versionNumber = $tag.TrimStart("v")
@@ -151,7 +151,7 @@ jobs:
         run: |
           tag="${{ inputs.tag_name || github.ref_name }}"
           if [ -z "$tag" ] || [ "$tag" = "main" ] || [ "$tag" = "master" ]; then
-              tag="v0.3.0"
+              tag="v0.3.1"
           fi
           if [[ "$tag" != v* ]]; then
               version_with_v="v$tag"
@@ -265,7 +265,7 @@ jobs:
         run: |
           TAG="${{ inputs.tag_name || github.ref_name }}"
           if [ -z "$TAG" ] || [ "$TAG" = "main" ] || [ "$TAG" = "master" ]; then
-            TAG="v0.3.0"
+            TAG="v0.3.1"
           fi
           if [[ "$TAG" != v* ]]; then
             TAG="v$TAG"
