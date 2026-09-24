@@ -2745,3 +2745,61 @@ body.dragging-snippet .package-card.drop-target {
     animation: none;
   }
 }
+
+/* Leading icons in toolbar buttons and ▾ menus (Termius-style) */
+.btn-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.btn-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+}
+
+.btn.primary .btn-icon {
+  margin-left: -4px;
+}
+
+.dropdown-menu .btn-icon {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.dropdown-menu button:hover .btn-icon {
+  color: var(--md-sys-color-on-surface);
+}
+
+/* MD3 ripple (see bindRipples in app.js): drawn in a fixed overlay clipped to
+   the pressed element, in the element's content colour. */
+.md-ripple-host {
+  position: fixed;
+  z-index: 3500;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 250ms linear;
+}
+
+.md-ripple-host.fading {
+  opacity: 0;
+}
+
+.md-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.16;
+  transform: scale(0);
+  animation: md-ripple-grow 450ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+@keyframes md-ripple-grow {
+  to {
+    transform: scale(1);
+  }
+}

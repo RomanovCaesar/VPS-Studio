@@ -253,6 +253,7 @@ function init() {
   bindCommandPanelEvents();
   bindPackageFieldEvents();
   bindDragAndDrop();
+  bindRipples();
   document.addEventListener("change", (event) => {
     const input = event.target.closest?.('input[data-combo-action="change-net-iface"]');
     if (!input?.value) return;
@@ -495,10 +496,6 @@ function renderKeySelect(id, auth, attrs = "") {
    The popup lives on <body> (position: fixed) so scroll containers never clip
    it, and it re-anchors by id after each render().
    -------------------------------------------------------------------------- */
-function chevronDownIcon() {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
-}
-
 // Read-only dropdown: a hidden input holds the value, a button shows the label.
 function renderMdSelect(id, options, selected, { disabled = false, placeholder = "", icon = "", compact = false, action = "" } = {}) {
   const current = options.find((option) => option.value === selected) || null;
@@ -3355,6 +3352,110 @@ function bindDragAndDrop() {
   });
 }
 
+/* --------------------------------------------------------------------------
+   MD3 ripple: a wave of the element's content colour grows from the press
+   point. It is drawn in an overlay clipped to the element's box and radius
+   (not inside the element), because most clicks call render(), which would
+   destroy an in-element ripple a few milliseconds after it started.
+   -------------------------------------------------------------------------- */
+const RIPPLE_TARGETS = [
+  "button",
+  ".btn",
+  ".side-item",
+  ".tab",
+  ".host-card",
+  ".group-card",
+  ".mini-card",
+  ".cmd-item",
+  ".cmd-category",
+  ".md-combo-option",
+  ".lang-option",
+  ".package-member",
+  "tr[data-sftp-path]",
+  "[role='tab']",
+].join(",");
+const RIPPLE_MIN_MS = 225; // keep the wave visible at least this long before fading
+
+function rippleTarget(element) {
+  const target = element?.closest?.(RIPPLE_TARGETS);
+  if (!target || target.closest("[data-no-ripple], .xterm, #terminalPane")) return null;
+  if (target.disabled || target.getAttribute("aria-disabled") === "true" || target.closest(".disabled")) return null;
+  return target;
+}
+
+function spawnRipple(target, x, y) {
+  const rect = target.getBoundingClientRect();
+  if (rect.width < 2 || rect.height < 2) return null;
+  const style = getComputedStyle(target);
+  const host = document.createElement("span");
+  host.className = "md-ripple-host";
+  host.style.left = `${rect.left}px`;
+  host.style.top = `${rect.top}px`;
+  host.style.width = `${rect.width}px`;
+  host.style.height = `${rect.height}px`;
+  host.style.borderRadius = style.borderRadius;
+  host.style.color = style.color;
+
+  // Radius that reaches the farthest corner from the press point.
+  const px = Math.min(Math.max(x - rect.left, 0), rect.width);
+  const py = Math.min(Math.max(y - rect.top, 0), rect.height);
+  const radius = Math.hypot(Math.max(px, rect.width - px), Math.max(py, rect.height - py));
+  const wave = document.createElement("span");
+  wave.className = "md-ripple";
+  wave.style.width = wave.style.height = `${radius * 2}px`;
+  wave.style.left = `${px - radius}px`;
+  wave.style.top = `${py - radius}px`;
+  // Larger surfaces get a slightly slower wave, as in MD3.
+  wave.style.animationDuration = `${Math.min(550, 300 + radius * 0.6)}ms`;
+  host.appendChild(wave);
+  document.body.appendChild(host);
+  return { host, started: performance.now() };
+}
+
+function releaseRipple(ripple) {
+  if (!ripple || ripple.released) return;
+  ripple.released = true;
+  const wait = Math.max(0, RIPPLE_MIN_MS - (performance.now() - ripple.started));
+  setTimeout(() => {
+    ripple.host.classList.add("fading");
+    setTimeout(() => ripple.host.remove(), 260);
+  }, wait);
+}
+
+function bindRipples() {
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  let active = null;
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (event.button !== 0) return;
+      const target = rippleTarget(event.target);
+      if (!target) return;
+      active = spawnRipple(target, event.clientX, event.clientY);
+    },
+    true,
+  );
+  const release = () => {
+    releaseRipple(active);
+    active = null;
+  };
+  ["pointerup", "pointercancel", "dragstart", "blur"].forEach((type) =>
+    (type === "blur" ? window : document).addEventListener(type, release, true),
+  );
+  // Keyboard activation ripples from the centre, like MD3.
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.repeat || (event.key !== "Enter" && event.key !== " ")) return;
+      const target = rippleTarget(event.target);
+      if (!target || target !== event.target) return;
+      const rect = target.getBoundingClientRect();
+      releaseRipple(spawnRipple(target, rect.left + rect.width / 2, rect.top + rect.height / 2));
+    },
+    true,
+  );
+}
+
 function parentPath(path) {
   if (!path || path === "/") return "/";
   const clean = path.replace(/\/+$/, "");
@@ -3661,11 +3762,11 @@ function renderHostsPage() {
     </div>
     <div class="toolstrip">
       <div class="split">
-        <button class="btn primary" data-action="new-host">${t("New host")}</button>
+        <button class="btn primary" data-action="new-host">${btnIcon(plusIcon())}<span>${t("New host")}</span></button>
         <button class="btn square" data-action="toggle-host-menu" title="${t("More options")}">${chevronDownIcon(state.hostMenuOpen)}</button>
         ${state.hostMenuOpen ? renderHostMenu() : ""}
       </div>
-      <button class="btn ghost strong" data-action="local-terminal">${t("Terminal")}</button>
+      <button class="btn ghost strong" data-action="local-terminal">${btnIcon(terminalIcon())}<span>${t("Terminal")}</span></button>
       ${renderToolstripRight(false)}
     </div>
     ${state.openedGroup ? renderGroupBreadcrumb() : ""}
@@ -3725,7 +3826,7 @@ function renderGroupCard([group, count]) {
 function renderHostMenu() {
   return `
     <div class="dropdown-menu wide">
-      <button data-action="new-group">${t("New Group")}</button>
+      <button data-action="new-group">${btnIcon(groupIcon())}<span>${t("New Group")}</span></button>
     </div>
   `;
 }
@@ -3836,6 +3937,31 @@ function contextSnippet() {
 
 function pencilIcon() {
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`;
+}
+
+// Leading icon for toolbar buttons and menu items.
+function btnIcon(svg) {
+  return `<span class="btn-icon" aria-hidden="true">${svg}</span>`;
+}
+
+function plusIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
+}
+
+function terminalIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="m7 9.5 3 2.5-3 2.5M12.5 15H17"/></svg>`;
+}
+
+function historyIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>`;
+}
+
+function importIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>`;
+}
+
+function generateKeyIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 7.8-7.8M16 7l2.5 2.5M18.5 4.5 21 7"/><path d="M19 13.5v3M17.5 15h3"/></svg>`;
 }
 
 function chevronDownIcon(isOpen = false) {
@@ -3985,7 +4111,7 @@ function renderKeychainPage() {
   return `
     <div class="toolstrip first">
       <div class="split">
-        <button class="btn primary" data-action="new-key">${t("New key")}</button>
+        <button class="btn primary" data-action="new-key">${btnIcon(plusIcon())}<span>${t("New key")}</span></button>
         <button class="btn square" data-action="toggle-key-menu" title="${t("More options")}">${chevronDownIcon(state.keyMenuOpen)}</button>
         ${state.keyMenuOpen ? renderKeyMenu() : ""}
       </div>
@@ -4014,8 +4140,8 @@ function renderKeyMenu() {
   return `
     <div class="dropdown-overlay" data-action="close-all-menus" style="position:fixed; inset:0; z-index:9;"></div>
     <div class="dropdown-menu" style="z-index:10;">
-      <button data-action="generate-key">${t("Generate key")}</button>
-      <button data-action="new-identity">${t("New Identity")}</button>
+      <button data-action="generate-key">${btnIcon(generateKeyIcon())}<span>${t("Generate key")}</span></button>
+      <button data-action="new-identity">${btnIcon(identityIcon())}<span>${t("New Identity")}</span></button>
     </div>
   `;
 }
@@ -4108,11 +4234,11 @@ function renderSnippetsPage() {
   return `
     <div class="toolstrip first">
       <div class="split">
-        <button class="btn primary" data-action="new-snippet">${t("New snippet")}</button>
+        <button class="btn primary" data-action="new-snippet">${btnIcon(plusIcon())}<span>${t("New snippet")}</span></button>
         <button class="btn square" data-action="toggle-snippet-menu" title="${t("More options")}">${chevronDownIcon(state.snippetMenuOpen)}</button>
         ${state.snippetMenuOpen ? renderSnippetMenu() : ""}
       </div>
-      <button class="btn ghost strong" data-action="show-shell-history">${t("Shell History")}</button>
+      <button class="btn ghost strong" data-action="show-shell-history">${btnIcon(historyIcon())}<span>${t("Shell History")}</span></button>
       ${renderToolstripRight(true)}
     </div>
     ${
@@ -4164,7 +4290,7 @@ function renderKnownHostsPage() {
   }), h => h.host);
   return `
     <div class="toolstrip first">
-      <button class="btn secondary" data-action="import-known-hosts" ${state.importingKnownHosts ? 'disabled' : ''}>${state.importingKnownHosts ? t('Importing...') : t('Import')}</button>
+      <button class="btn secondary" data-action="import-known-hosts" ${state.importingKnownHosts ? 'disabled' : ''}>${btnIcon(importIcon())}<span>${state.importingKnownHosts ? t('Importing...') : t('Import')}</span></button>
       ${renderToolstripRight(true)}
     </div>
     <div class="section-head" style="margin-top: 0;">
@@ -4620,7 +4746,7 @@ function packageLabel(pkg) {
 function renderSnippetMenu() {
   return `
     <div class="dropdown-menu wide">
-      <button data-action="new-snippet-package">${packageIcon()} <span>${t("New snippet package")}</span></button>
+      <button data-action="new-snippet-package">${btnIcon(packageIcon())}<span>${t("New snippet package")}</span></button>
     </div>
   `;
 }
