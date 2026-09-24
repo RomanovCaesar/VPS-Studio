@@ -2232,3 +2232,516 @@ button:not(:disabled):active,
   outline: 2px solid var(--md-sys-color-primary);
   outline-offset: 3px;
 }
+
+/* ==========================================================================
+   Snippet packages
+   ========================================================================== */
+
+.snippet-card {
+  grid-template-columns: 48px minmax(0, 1fr) auto auto;
+}
+
+.snippet-card .card-content,
+.package-card .card-content {
+  min-width: 0;
+}
+
+.package-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 140px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mini-card .package-chip svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+}
+
+.split > .dropdown-menu button svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.field-hint {
+  margin-top: 6px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+}
+
+.package-members {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.package-member {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  text-align: left;
+  transition: background 120ms ease;
+}
+
+.package-member:hover {
+  background: var(--md-sys-color-surface-container-highest);
+}
+
+.package-member-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.package-member-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.package-member-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.package-member-text strong {
+  font-size: 13.5px;
+}
+
+.package-member-text span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   SSH workspace command panel (FinalShell-style)
+   ========================================================================== */
+
+.bottom > .cmd-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.cmd-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 16px 12px;
+}
+
+.cmd-list-pane,
+.cmd-editor-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container);
+  overflow: hidden;
+}
+
+.cmd-categories {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  scrollbar-width: thin;
+}
+
+.cmd-category {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-small);
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.cmd-category svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cmd-category:hover {
+  background: var(--md-sys-state-hover);
+  color: var(--md-sys-color-on-surface);
+}
+
+.cmd-category.active {
+  border-color: transparent;
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+
+.cmd-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.cmd-category.active .cmd-count {
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+}
+
+.cmd-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.cmd-item {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: var(--md-sys-shape-corner-small);
+  color: var(--md-sys-color-on-surface);
+  cursor: default;
+  user-select: none;
+}
+
+.cmd-item:hover {
+  background: var(--md-sys-state-hover);
+}
+
+.cmd-item.selected {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.cmd-item-name {
+  flex: 0 1 auto;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.cmd-item-script {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+}
+
+.cmd-item.selected .cmd-item-script {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.cmd-empty {
+  padding: 18px 10px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 13px;
+  text-align: center;
+}
+
+.cmd-pane-title {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.cmd-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cmd-editor:focus {
+  box-shadow: inset 0 0 0 2px var(--md-sys-color-primary);
+}
+
+.cmd-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.cmd-actions .btn {
+  height: 34px;
+}
+
+.cmd-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cmd-options-wrap {
+  position: relative;
+}
+
+.dropdown-menu.cmd-options-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  min-width: 240px;
+  transform-origin: bottom right;
+}
+
+.cmd-options-menu button {
+  gap: 10px;
+}
+
+.cmd-check {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--md-sys-color-primary);
+}
+
+.cmd-check svg {
+  width: 18px;
+  height: 18px;
+}
+
+.cmd-menu-divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--md-sys-color-outline-variant);
+}
+
+/* Command list: names only, flowing left to right like FinalShell */
+.cmd-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 4px;
+}
+
+.cmd-list .cmd-item {
+  display: inline-block;
+  max-width: 100%;
+  padding: 5px 10px;
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cmd-list .cmd-empty {
+  width: 100%;
+}
+
+/* Snippet editor: package picker with a Remove button */
+.package-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.package-field-row .md-combo {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.btn.package-remove-btn {
+  flex: 0 0 auto;
+  height: 42px;
+  color: var(--md-sys-color-error);
+}
+
+.btn.package-remove-btn[hidden] {
+  display: none;
+}
+
+.md-combo.no-clear .md-combo-clear {
+  display: none;
+}
+
+/* Drag a host onto a group / a snippet onto a package */
+.host-card[draggable="true"],
+.snippet-card[draggable="true"] {
+  cursor: grab;
+}
+
+.host-card.dragging,
+.snippet-card.dragging {
+  opacity: 0.45;
+}
+
+body.dragging-host .group-card,
+body.dragging-snippet .package-card {
+  border-style: dashed;
+  border-color: var(--md-sys-color-outline);
+}
+
+.group-card.drop-target,
+.package-card.drop-target,
+body.dragging-host .group-card.drop-target,
+body.dragging-snippet .package-card.drop-target {
+  border-style: solid;
+  border-color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface-container));
+  box-shadow: 0 0 0 2px var(--md-sys-color-primary);
+  transform: none;
+}
+
+.move-toast {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  z-index: 2500;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 300px;
+  max-width: 440px;
+  padding: 14px 12px 14px 14px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-highest);
+  box-shadow: var(--md-sys-elevation-3);
+  color: var(--md-sys-color-on-surface);
+  animation: delete-pop-in 180ms var(--md-sys-motion-standard);
+}
+
+.move-toast-count {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+}
+
+.move-toast-count svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.move-toast-count circle {
+  fill: none;
+  stroke-width: 3.5;
+}
+
+.move-toast-count .track {
+  stroke: var(--md-sys-color-outline-variant);
+}
+
+.move-toast-count .ring {
+  stroke: var(--md-sys-color-primary);
+  stroke-linecap: round;
+  stroke-dasharray: 106.8;
+  stroke-dashoffset: 0;
+  animation-name: move-countdown;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes move-countdown {
+  to { stroke-dashoffset: 106.8; }
+}
+
+.move-toast-number {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.move-toast-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.move-toast-text {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.btn.move-toast-undo {
+  height: 32px;
+  padding: 0 16px;
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+
+.move-toast-close {
+  align-self: flex-start;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .move-toast,
+  .move-toast-count .ring {
+    animation: none;
+  }
+}

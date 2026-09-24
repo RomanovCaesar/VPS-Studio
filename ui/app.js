@@ -56,6 +56,15 @@ const state = {
   selectedSnippetId: null,
   editingSnippet: null,
   editingSnippetIndex: -1,
+  snippetPackages: [],
+  selectedPackageId: null,
+  openedPackageId: null,
+  editingPackage: null,
+  cmdCategory: "",
+  cmdSelectedSnippetId: null,
+  cmdEditorText: "",
+  cmdOptions: { ctrlEnter: false, clearAfterSend: true, appendCr: true },
+  cmdOptionsOpen: false,
   shellHistory: [],
   shellHistorySavingIndex: -1,
   sftpFilter: "",
@@ -241,6 +250,9 @@ function init() {
   document.addEventListener("contextmenu", (event) => event.preventDefault());
   bindComboEvents();
   bindSftpEvents();
+  bindCommandPanelEvents();
+  bindPackageFieldEvents();
+  bindDragAndDrop();
   document.addEventListener("change", (event) => {
     const input = event.target.closest?.('input[data-combo-action="change-net-iface"]');
     if (!input?.value) return;
@@ -259,6 +271,9 @@ async function loadInitialHosts() {
   state.keys = loadKeychain();
   state.identities = loadIdentities();
   state.snippets = loadSnippets();
+  state.snippetPackages = loadSnippetPackages();
+  migrateSnippetPackages();
+  state.cmdOptions = loadCommandEditorOptions();
   state.shellHistory = loadShellHistory();
   state.logs = loadLogs();
   try {
@@ -501,9 +516,9 @@ function renderMdSelect(id, options, selected, { disabled = false, placeholder =
 }
 
 // Editable combobox with filtered suggestions (Termius-style group picker).
-function renderMdCombo(id, options, currentValue, { placeholder = "", icon = "" } = {}) {
+function renderMdCombo(id, options, currentValue, { placeholder = "", icon = "", clearable = true } = {}) {
   return `
-    <div class="md-combo md-combobox ${currentValue ? "has-value" : ""}" data-combo-for="${escapeAttr(id)}" data-combo-mode="combo" data-options="${escapeAttr(JSON.stringify(options))}">
+    <div class="md-combo md-combobox ${currentValue ? "has-value" : ""} ${clearable ? "" : "no-clear"}" data-combo-for="${escapeAttr(id)}" data-combo-mode="combo" data-options="${escapeAttr(JSON.stringify(options))}">
       ${icon ? `<span class="md-combo-lead">${icon}</span>` : ""}
       <input id="${escapeAttr(id)}" class="md-combo-input" value="${escapeAttr(currentValue || "")}" placeholder="${escapeAttr(placeholder)}" autocomplete="off" spellcheck="false" />
       <button type="button" class="md-combo-clear" tabindex="-1" title="${t("Clear")}">${closeIcon()}</button>
@@ -1135,6 +1150,7 @@ function closeEditor() {
   state.editingGroup = null;
   state.editingKey = null;
   state.editingSnippet = null;
+  state.editingPackage = null;
   state.editingIndex = -1;
   state.editingKeyIndex = -1;
   state.editingSnippetIndex = -1;
@@ -1468,7 +1484,7 @@ function emptySnippet() {
     id: `snippet-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     name: "",
     script: "",
-    package: "",
+    packageId: "",
   };
 }
 
@@ -1479,7 +1495,7 @@ function normalizeSnippet(snippet = {}) {
     id: snippet.id || `snippet-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     name: snippet.name || "",
     script: snippet.script || snippet.command || "",
-    package: snippet.package || "",
+    packageId: snippet.packageId || "",
   };
 }
 
@@ -1516,6 +1532,9 @@ function openSnippetDetails(snippet = null) {
   const index = snippet ? state.snippets.findIndex((item) => item.id === snippet.id) : -1;
   state.editingSnippetIndex = index;
   state.editingSnippet = index >= 0 ? clone(state.snippets[index]) : emptySnippet();
+  if (index < 0 && packageById(state.openedPackageId)) state.editingSnippet.packageId = state.openedPackageId;
+  state.editingSnippet.packageName = packageById(state.editingSnippet.packageId)?.name || "";
+  state.editingPackage = null;
   state.selectedSnippetId = index >= 0 ? state.snippets[index].id : null;
   state.detailKind = "snippet";
   state.detailOpen = true;
@@ -1536,6 +1555,12 @@ function saveSnippetDetails() {
   if (!state.editingSnippet) return;
   readSnippetDetails();
   const snippet = normalizeSnippet(state.editingSnippet);
+  // Typing a new name in the picker creates that package; clearing it moves
+  // the snippet back to Default.
+  if ("packageName" in snippet) {
+    snippet.packageId = snippetIsBlank(snippet) ? snippet.packageId : ensurePackageNamed(snippet.packageName);
+    delete snippet.packageName;
+  }
   if (snippetIsBlank(snippet)) {
     state.selectedSnippetId = null;
     closeEditor();
@@ -1586,6 +1611,7 @@ function readSnippetDetails() {
   if (!state.editingSnippet || !document.getElementById("snippetName")) return;
   state.editingSnippet.name = rawValue("snippetName");
   state.editingSnippet.script = rawValue("snippetScript");
+  state.editingSnippet.packageName = rawValue("snippetPackage");
 }
 
 async function createSnippet() {
@@ -1632,6 +1658,7 @@ function openShellHistory() {
   state.editingGroup = null;
   state.editingKey = null;
   state.editingSnippet = null;
+  state.editingPackage = null;
   state.editingIndex = -1;
   state.editingKeyIndex = -1;
   state.editingSnippetIndex = -1;
@@ -1829,7 +1856,8 @@ async function disconnect() {
 function appendTerminal(text) {
   terminalWrite(text);
   const active = document.activeElement;
-  if (active?.id !== "commandInput" && !active?.closest?.(".app-dialog")) xterm?.focus();
+  const typing = active?.matches?.("input, textarea, select, [contenteditable]") || active?.closest?.(".app-dialog");
+  if (!typing) xterm?.focus();
 }
 
 function appendTerminalOutput(text) {
@@ -3161,6 +3189,172 @@ function bindSftpEvents() {
   }, { capture: true, passive: true });
 }
 
+/* --------------------------------------------------------------------------
+   Drag a host onto a group card, or a snippet onto a package card. The move
+   is applied after a 5 second countdown that can be undone (Termius-style).
+   -------------------------------------------------------------------------- */
+const MOVE_DELAY_SECONDS = 5;
+let dragItem = null; // { kind: "host" | "snippet", id }
+let pendingMove = null; // { kind, id, to, remaining, timer }
+let moveToastEl = null;
+
+function dropTargetFor(element) {
+  if (!dragItem || !element?.closest) return null;
+  return dragItem.kind === "host"
+    ? element.closest(".group-card[data-group]")
+    : element.closest(".package-card[data-package-id]");
+}
+
+function clearDropHighlight() {
+  document.querySelectorAll(".drop-target").forEach((el) => el.classList.remove("drop-target"));
+}
+
+function moveAlreadyApplied(kind, id, to) {
+  if (kind === "host") {
+    const host = state.hosts.find((item) => item.id === id);
+    return !host || normalizeGroupPath(host.group || "Default") === normalizeGroupPath(to);
+  }
+  const snippet = state.snippets.find((item) => item.id === id);
+  return !snippet || (snippet.packageId || "") === to;
+}
+
+function moveTargetLabel(kind, to) {
+  return kind === "host" ? groupLabel(to) : packageLabel(packageById(to));
+}
+
+function scheduleMove(kind, id, to) {
+  if (pendingMove) commitPendingMove();
+  if (moveAlreadyApplied(kind, id, to)) return;
+  pendingMove = { kind, id, to, remaining: MOVE_DELAY_SECONDS, timer: null };
+  pendingMove.timer = setInterval(() => {
+    if (!pendingMove) return;
+    pendingMove.remaining -= 1;
+    if (pendingMove.remaining <= 0) commitPendingMove();
+    else drawMoveToast();
+  }, 1000);
+  drawMoveToast();
+}
+
+async function commitPendingMove() {
+  const move = pendingMove;
+  if (!move) return;
+  clearInterval(move.timer);
+  pendingMove = null;
+  removeMoveToast();
+  if (move.kind === "host") {
+    const host = state.hosts.find((item) => item.id === move.id);
+    if (!host) return;
+    host.group = normalizeGroupPath(move.to);
+    render();
+    try {
+      await saveHosts();
+    } catch (error) {
+      setStatus(t("Save failed: {0}", error));
+      return;
+    }
+  } else {
+    const snippet = state.snippets.find((item) => item.id === move.id);
+    if (!snippet || !packageById(move.to)) return;
+    snippet.packageId = move.to;
+    persistSnippets();
+    render();
+  }
+  setStatus(t("Moved to {0}", moveTargetLabel(move.kind, move.to)));
+}
+
+function cancelPendingMove() {
+  if (!pendingMove) return;
+  clearInterval(pendingMove.timer);
+  pendingMove = null;
+  removeMoveToast();
+}
+
+function drawMoveToast() {
+  if (!pendingMove) return;
+  if (!moveToastEl) {
+    moveToastEl = document.createElement("div");
+    moveToastEl.className = "move-toast";
+    moveToastEl.setAttribute("role", "status");
+    moveToastEl.addEventListener("click", (event) => {
+      if (event.target.closest("[data-move-undo]")) cancelPendingMove();
+      else if (event.target.closest("[data-move-now]")) commitPendingMove();
+    });
+    document.body.appendChild(moveToastEl);
+  }
+  const { kind, to, remaining } = pendingMove;
+  const label = moveTargetLabel(kind, to);
+  const message = kind === "host" ? t("Moving 1 host to {0}", label) : t("Moving 1 snippet to {0}", label);
+  // Only the number changes each second; the ring animates on its own.
+  if (moveToastEl.dataset.ready) {
+    moveToastEl.querySelector(".move-toast-number").textContent = String(remaining);
+    return;
+  }
+  moveToastEl.dataset.ready = "1";
+  moveToastEl.innerHTML = `
+    <div class="move-toast-count" aria-hidden="true">
+      <svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="17"/><circle class="ring" cx="20" cy="20" r="17" style="animation-duration:${MOVE_DELAY_SECONDS}s"/></svg>
+      <span class="move-toast-number">${remaining}</span>
+    </div>
+    <div class="move-toast-body">
+      <div class="move-toast-text">${escapeHtml(message)}</div>
+      <button class="btn move-toast-undo" data-move-undo>${t("Undo")}</button>
+    </div>
+    <button class="icon-btn quiet move-toast-close" data-move-now title="${t("Move now")}" aria-label="${t("Move now")}">${closeIcon()}</button>
+  `;
+}
+
+function removeMoveToast() {
+  moveToastEl?.remove();
+  moveToastEl = null;
+}
+
+function bindDragAndDrop() {
+  document.addEventListener("dragstart", (event) => {
+    const host = event.target.closest?.(".host-card[data-host-id]");
+    const snippet = event.target.closest?.(".snippet-card[data-snippet-id]");
+    const card = host || snippet;
+    if (!card) return;
+    dragItem = host ? { kind: "host", id: host.dataset.hostId } : { kind: "snippet", id: snippet.dataset.snippetId };
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", dragItem.id);
+    card.classList.add("dragging");
+    document.body.classList.add(`dragging-${dragItem.kind}`);
+  });
+
+  document.addEventListener("dragover", (event) => {
+    const target = dropTargetFor(event.target);
+    if (!target) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (!target.classList.contains("drop-target")) {
+      clearDropHighlight();
+      target.classList.add("drop-target");
+    }
+  });
+
+  document.addEventListener("dragleave", (event) => {
+    const target = dropTargetFor(event.target);
+    if (target && !target.contains(event.relatedTarget)) target.classList.remove("drop-target");
+  });
+
+  document.addEventListener("drop", (event) => {
+    const target = dropTargetFor(event.target);
+    if (!target) return;
+    event.preventDefault();
+    const item = dragItem;
+    clearDropHighlight();
+    if (item.kind === "host") scheduleMove("host", item.id, target.dataset.group);
+    else scheduleMove("snippet", item.id, target.dataset.packageId);
+  });
+
+  document.addEventListener("dragend", () => {
+    clearDropHighlight();
+    document.querySelectorAll(".dragging").forEach((el) => el.classList.remove("dragging"));
+    document.body.classList.remove("dragging-host", "dragging-snippet");
+    dragItem = null;
+  });
+}
+
 function parentPath(path) {
   if (!path || path === "/") return "/";
   const clean = path.replace(/\/+$/, "");
@@ -3197,6 +3391,7 @@ function syncFormsToState() {
     if (state.editingIdentity && state.detailKind === "identity") readIdentityForm();
     if (state.editingKey && state.detailKind === "key") readKeyDetails();
     if (state.editingSnippet && state.detailKind === "snippet") readSnippetDetails();
+    if (state.editingPackage && state.detailKind === "package") readPackageDetails();
   }
 }
 
@@ -3210,6 +3405,7 @@ function deleteDialogVisual(item) {
   if (type === "key") return { icon: keySmallIcon(), background: "var(--blue-2)" };
   if (type === "identity") return { icon: identityIcon(), background: "var(--blue-2)" };
   if (type === "snippet") return { icon: snippetIcon(), background: "var(--blue-2)" };
+  if (type === "package") return { icon: packageIcon(), background: "var(--blue-2)" };
   if (type === "folder") {
     return {
       icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3Z"/></svg>`,
@@ -3538,7 +3734,7 @@ function renderHostCard(host) {
   const auth = authLabel(host.auth);
   const { svg, color } = osIcon(host.os);
   return `
-    <article class="host-card ${state.selectedHostId === host.id ? "active" : ""}" data-host-id="${escapeAttr(host.id)}">
+    <article class="host-card ${state.selectedHostId === host.id ? "active" : ""}" data-host-id="${escapeAttr(host.id)}" draggable="true">
       <div class="host-mark" style="background: ${color};">${svg}</div>
       <div>
         <div class="host-name">${escapeHtml(host.name)}</div>
@@ -3560,6 +3756,14 @@ function renderContextMenu() {
       <div class="context-menu compact" style="left:${left}px;top:${top}px">
         <button data-action="ctx-edit-snippet">${pencilIcon()} <span>${t("Edit")}</span></button>
         <button class="danger-text" data-action="ctx-remove-snippet">${trashIcon()} <span>${t("Remove")}</span></button>
+      </div>
+    `;
+  }
+  if (menu.kind === "package") {
+    return `
+      <div class="context-menu compact" style="left:${left}px;top:${top}px">
+        <button data-action="ctx-edit-package">${pencilIcon()} <span>${t("Edit")}</span></button>
+        <button class="danger-text" data-action="ctx-remove-package">${trashIcon()} <span>${t("Remove")}</span></button>
       </div>
     `;
   }
@@ -3888,24 +4092,42 @@ function renderIdentityCard(ident) {
 }
 
 function renderSnippetsPage() {
-  const snippets = applySort(state.snippets.filter(s => {
-    const q = state.search.toLowerCase();
-    return !q || s.title.toLowerCase().includes(q) || s.script.toLowerCase().includes(q);
-  }), s => s.title);
+  const q = state.search.toLowerCase();
+  const snippets = applySort(state.snippets.filter((s) => {
+    return !q || snippetLabel(s).toLowerCase().includes(q) || s.script.toLowerCase().includes(q);
+  }), (s) => snippetLabel(s) || s.script);
+  const packages = applySort(state.snippetPackages.filter((pkg) => !q || pkg.name.toLowerCase().includes(q)), (pkg) => pkg.name);
+  if (state.openedPackageId && !packageById(state.openedPackageId)) state.openedPackageId = null;
+  const opened = packageById(state.openedPackageId);
+  // Inside a package: its snippets. At the root: only snippets without a
+  // package, except while searching, when every match is shown.
+  const visibleSnippets = snippets.filter((s) =>
+    opened ? s.packageId === opened.id : q || !packageById(s.packageId),
+  );
 
   return `
     <div class="toolstrip first">
       <div class="split">
         <button class="btn primary" data-action="new-snippet">${t("New snippet")}</button>
+        <button class="btn square" data-action="toggle-snippet-menu" title="${t("More options")}">${chevronDownIcon(state.snippetMenuOpen)}</button>
+        ${state.snippetMenuOpen ? renderSnippetMenu() : ""}
       </div>
       <button class="btn ghost strong" data-action="show-shell-history">${t("Shell History")}</button>
       ${renderToolstripRight(true)}
     </div>
+    ${
+      opened
+        ? `<nav class="breadcrumb"><button data-action="show-all-snippets">${t("All snippets")}</button><span class="crumb-sep">›</span><span>${escapeHtml(packageLabel(opened))}</span></nav>`
+        : packages.length
+          ? `<div class="section-head"><h2>${t("Packages")}</h2></div>
+             <div class="page-grid">${packages.map(renderPackageCard).join("")}</div>`
+          : ""
+    }
     <div class="section-head"><h2>${t("Snippets")}</h2></div>
     <div class="page-grid">
       ${
-        snippets.length
-          ? snippets.map(renderSnippetCard).join("")
+        visibleSnippets.length
+          ? visibleSnippets.map(renderSnippetCard).join("")
           : (state.search ? `<div class="empty">${t("No snippets match the search.")}</div>` : `<div class="empty">${t("Empty")}</div>`)
       }
     </div>
@@ -3923,12 +4145,13 @@ function renderSnippetCard(snippet) {
   const subtitle = hasLabel ? snippet.script : "";
 
   return `
-    <article class="mini-card snippet-card ${state.selectedSnippetId === snippet.id ? "active" : ""}" data-snippet-id="${escapeAttr(snippet.id)}">
+    <article class="mini-card snippet-card ${state.selectedSnippetId === snippet.id ? "active" : ""}" data-snippet-id="${escapeAttr(snippet.id)}" draggable="true">
       <div class="mini-icon">${snippetIcon()}</div>
       <div class="card-content">
         <div class="host-name truncate-text ${!hasLabel ? 'code-font' : ''}">${escapeHtml(title)}</div>
         ${subtitle ? `<div class="host-meta truncate-text code-font">${escapeHtml(subtitle)}</div>` : ""}
       </div>
+      ${packageById(snippet.packageId) && !state.openedPackageId ? `<span class="package-chip" title="${escapeAttr(t("Package"))}">${packageIcon()}<span class="truncate-text">${escapeHtml(packageById(snippet.packageId).name)}</span></span>` : ""}
       <button class="card-edit" title="${t("Edit snippet")}" data-action="edit-snippet" data-snippet-id="${escapeAttr(snippet.id)}">${pencilIcon()}</button>
     </article>
   `;
@@ -4305,37 +4528,468 @@ function fileIcon(entry) {
   return `<span class="file-icon file" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg></span>`;
 }
 
-function renderSessionSnippets() {
-  const snippets = state.snippets;
+/* --------------------------------------------------------------------------
+   Snippet packages: named categories for snippets. A snippet belongs to at
+   most one package (packageId); "" means the Default category.
+   -------------------------------------------------------------------------- */
+const SNIPPET_PACKAGES_KEY = "vps-studio.snippetPackages.v1";
+
+function newPackageId() {
+  return `pkg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function loadSnippetPackages() {
+  try {
+    const parsed = JSON.parse(window.localStorage?.getItem(SNIPPET_PACKAGES_KEY) || "[]");
+    return Array.isArray(parsed)
+      ? parsed.filter((pkg) => pkg && pkg.id).map((pkg) => ({ id: pkg.id, name: String(pkg.name || "") }))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSnippetPackages() {
+  try {
+    window.localStorage?.setItem(SNIPPET_PACKAGES_KEY, JSON.stringify(state.snippetPackages));
+  } catch (error) {
+    pushLog("Snippets", `Save snippet packages failed: ${error}`);
+  }
+}
+
+function packageById(id) {
+  return id ? state.snippetPackages.find((pkg) => pkg.id === id) || null : null;
+}
+
+function packageByName(name) {
+  const wanted = String(name || "").trim().toLowerCase();
+  return wanted ? state.snippetPackages.find((pkg) => pkg.name.trim().toLowerCase() === wanted) || null : null;
+}
+
+// Returns the id of the package with this name, creating it when it does not
+// exist yet. A blank name means the Default category ("").
+function ensurePackageNamed(name) {
+  const trimmed = String(name || "").trim();
+  if (!trimmed) return "";
+  const existing = packageByName(trimmed);
+  if (existing) return existing.id;
+  const pkg = { id: newPackageId(), name: trimmed };
+  state.snippetPackages.push(pkg);
+  persistSnippetPackages();
+  return pkg.id;
+}
+
+// One-time move from the old free-text `package` field to real packages.
+function migrateSnippetPackages() {
+  let changed = false;
+  for (const snippet of state.snippets) {
+    if (snippet.package && !snippet.packageId) {
+      snippet.packageId = ensurePackageNamed(snippet.package);
+      changed = true;
+    }
+    if ("package" in snippet) {
+      delete snippet.package;
+      changed = true;
+    }
+    if (snippet.packageId && !packageById(snippet.packageId)) {
+      snippet.packageId = "";
+      changed = true;
+    }
+  }
+  if (changed) persistSnippets();
+}
+
+function snippetsInPackage(packageId) {
+  return state.snippets.filter((snippet) => (snippet.packageId || "") === (packageId || ""));
+}
+
+function packageIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg>`;
+}
+
+function packageCountLabel(count) {
+  return count === 1 ? t("{0} snippet", count) : t("{0} snippets", count);
+}
+
+function packageLabel(pkg) {
+  return pkg?.name?.trim() || t("Unnamed package");
+}
+
+/* ---------- Snippets page ---------- */
+
+function renderSnippetMenu() {
   return `
-    <div class="main embedded">
-      <div class="session-snippet-grid">
-        ${snippets.length
-          ? snippets
-              .map(
-                (snippet) => {
-                  const label = snippetLabel(snippet);
-                  const hasLabel = Boolean(label);
-                  const title = hasLabel ? label : snippet.script;
-                  const subtitle = hasLabel ? snippet.script : "";
-                  return `
-              <div class="mini-card session-snippet-card">
-                <div class="mini-icon">${snippetIcon()}</div>
-                <div class="card-content">
-                  <div class="host-name truncate-text ${!hasLabel ? 'code-font' : ''}">${escapeHtml(title)}</div>
-                  ${subtitle ? `<div class="host-meta truncate-text code-font">${escapeHtml(subtitle)}</div>` : ""}
-                </div>
-                <button class="btn primary compact" data-action="run-snippet" data-snippet-id="${escapeAttr(snippet.id)}">${t("Run")}</button>
-              </div>
-            `;
-                }
-              )
-              .join("")
-          : `<div class="empty">${t("No snippets saved. Add snippets in the Snippets page.")}</div>`
-        }
-      </div>
+    <div class="dropdown-menu wide">
+      <button data-action="new-snippet-package">${packageIcon()} <span>${t("New snippet package")}</span></button>
     </div>
   `;
+}
+
+function renderPackageCard(pkg) {
+  return `
+    <article class="mini-card package-card ${state.selectedPackageId === pkg.id ? "active" : ""}" data-package-id="${escapeAttr(pkg.id)}">
+      <div class="mini-icon">${packageIcon()}</div>
+      <div class="card-content">
+        <div class="host-name truncate-text">${escapeHtml(packageLabel(pkg))}</div>
+        <div class="host-meta truncate-text">${escapeHtml(packageCountLabel(snippetsInPackage(pkg.id).length))}</div>
+      </div>
+      <button class="card-edit" title="${t("Edit package")}" data-action="edit-package" data-package-id="${escapeAttr(pkg.id)}">${pencilIcon()}</button>
+    </article>
+  `;
+}
+
+function openPackageDetails(pkg = null) {
+  syncFormsToState();
+  state.section = "snippets";
+  state.editingPackage = pkg ? { id: pkg.id, name: pkg.name, isNew: false } : { id: newPackageId(), name: "", isNew: true };
+  state.selectedPackageId = pkg ? pkg.id : null;
+  state.detailKind = "package";
+  state.detailOpen = true;
+  state.editorOpen = false;
+  state.editingSnippet = null;
+  state.editingSnippetIndex = -1;
+  closeMenus();
+  state.skipFormSync = true;
+  render();
+  if (!pkg) requestAnimationFrame(() => document.getElementById("packageName")?.focus());
+}
+
+function readPackageDetails() {
+  if (!state.editingPackage || !document.getElementById("packageName")) return;
+  state.editingPackage.name = rawValue("packageName");
+}
+
+function savePackageDetails() {
+  readPackageDetails();
+  const editing = state.editingPackage;
+  if (!editing) return;
+  const name = editing.name.trim();
+  if (!name) return setStatus(t("Package name is required"));
+  const clash = packageByName(name);
+  if (clash && clash.id !== editing.id) return setStatus(t("A package named {0} already exists", name));
+  const existing = packageById(editing.id);
+  if (existing) existing.name = name;
+  else state.snippetPackages.push({ id: editing.id, name });
+  persistSnippetPackages();
+  state.editingPackage = { id: editing.id, name, isNew: false };
+  state.selectedPackageId = editing.id;
+  setStatus(t("Package saved"));
+}
+
+async function removePackage(packageId) {
+  const pkg = packageById(packageId);
+  if (!pkg) return;
+  const members = snippetsInPackage(packageId);
+  const confirmed = await requestDeleteConfirmation({
+    title: t("Remove package"),
+    message: members.length
+      ? t("Are you sure you want to remove this package? Its {0} snippets are kept and move to Default.", members.length)
+      : t("Are you sure you want to remove this package?"),
+    item: { type: "package", title: packageLabel(pkg), subtitle: packageCountLabel(members.length) },
+  });
+  if (!confirmed) return;
+  members.forEach((snippet) => {
+    snippet.packageId = "";
+  });
+  state.snippetPackages = state.snippetPackages.filter((item) => item.id !== packageId);
+  if (state.selectedPackageId === packageId) state.selectedPackageId = null;
+  if (state.cmdCategory === packageId) state.cmdCategory = "";
+  if (state.editingPackage?.id === packageId) closeEditor();
+  persistSnippetPackages();
+  persistSnippets();
+  setStatus(t("Package removed"));
+  render();
+}
+
+function renderPackageDetails() {
+  const pkg = state.editingPackage || { id: "", name: "", isNew: true };
+  const members = pkg.isNew ? [] : snippetsInPackage(pkg.id);
+  return `
+    <aside class="details-panel">
+      <div class="details-head">
+        <div>
+          <h2>${t(pkg.isNew ? "New Package" : "Edit Package")}</h2>
+          <div class="details-sub">${t("Personal vault")}</div>
+        </div>
+        <button class="icon-btn quiet" title="${t("Close")}" data-action="close-editor">${closeIcon()}</button>
+      </div>
+      <div class="details-scroll">
+        <section class="details-card">
+          <h3>${t("General")}</h3>
+          <div class="detail-row with-mark">
+            <div class="host-mark blue">${packageIcon()}</div>
+            <input id="packageName" value="${escapeAttr(pkg.name)}" placeholder="${t("Package name")}" />
+          </div>
+        </section>
+        ${
+          pkg.isNew
+            ? ""
+            : `<section class="details-card">
+                <h3>${t("Snippets in this package")}</h3>
+                ${
+                  members.length
+                    ? `<div class="package-members">${members
+                        .map(
+                          (snippet) => `
+                          <button class="package-member" data-action="edit-snippet" data-snippet-id="${escapeAttr(snippet.id)}">
+                            <span class="package-member-icon">${snippetIcon()}</span>
+                            <span class="package-member-text">
+                              <strong class="truncate-text">${escapeHtml(snippetLabel(snippet) || snippet.script)}</strong>
+                              ${snippetLabel(snippet) ? `<span class="truncate-text code-font">${escapeHtml(snippet.script)}</span>` : ""}
+                            </span>
+                          </button>`,
+                        )
+                        .join("")}</div>`
+                    : `<div class="tiny">${t("No snippets in this package yet. Choose this package when editing a snippet.")}</div>`
+                }
+              </section>`
+        }
+      </div>
+      <div class="details-foot">
+        <button class="btn danger ${pkg.isNew ? "hidden" : ""}" data-action="remove-editing-package">${t("Remove")}</button>
+        <button class="btn primary wide-action" data-action="save-package">${t("Save Package")}</button>
+      </div>
+    </aside>
+  `;
+}
+
+/* ---------- SSH workspace: FinalShell-style command panel ---------- */
+const COMMAND_EDITOR_KEY = "vps-studio.commandEditor.v1";
+
+function loadCommandEditorOptions() {
+  const defaults = { ctrlEnter: false, clearAfterSend: true, appendCr: true };
+  try {
+    return { ...defaults, ...JSON.parse(window.localStorage?.getItem(COMMAND_EDITOR_KEY) || "{}") };
+  } catch {
+    return defaults;
+  }
+}
+
+function persistCommandEditorOptions() {
+  try {
+    window.localStorage?.setItem(COMMAND_EDITOR_KEY, JSON.stringify(state.cmdOptions));
+  } catch {
+    // Options are a convenience; losing them is harmless.
+  }
+}
+
+function commandCategories() {
+  const categories = [{ id: "", name: t("Default"), count: snippetsInPackage("").length }];
+  applySort(state.snippetPackages, (pkg) => pkg.name).forEach((pkg) => {
+    categories.push({ id: pkg.id, name: packageLabel(pkg), count: snippetsInPackage(pkg.id).length });
+  });
+  return categories;
+}
+
+function renderSessionSnippets() {
+  return `
+    <div class="cmd-panel">
+      ${renderCommandListPane()}
+      <section class="cmd-editor-pane">
+        <div class="cmd-pane-title">${t("Command editor")}</div>
+        <textarea id="commandEditor" class="cmd-editor code-font" spellcheck="false" autocomplete="off" placeholder="${t("Type commands here, then click Send.")}">${escapeHtml(state.cmdEditorText)}</textarea>
+        <div class="cmd-actions" id="commandEditorActions">${renderCommandEditorActions()}</div>
+      </section>
+    </div>
+  `;
+}
+
+function renderCommandListPane() {
+  if (!packageById(state.cmdCategory)) state.cmdCategory = "";
+  const categories = commandCategories();
+  const snippets = applySort(snippetsInPackage(state.cmdCategory), (snippet) => snippetLabel(snippet) || snippet.script);
+  if (!snippets.some((snippet) => snippet.id === state.cmdSelectedSnippetId)) state.cmdSelectedSnippetId = null;
+  const list = state.snippets.length
+    ? snippets.length
+      ? snippets
+          .map(
+            (snippet) => `
+            <div class="cmd-item ${snippet.id === state.cmdSelectedSnippetId ? "selected" : ""}" data-cmd-snippet="${escapeAttr(snippet.id)}" title="${escapeAttr(snippet.script)}">${escapeHtml(snippetLabel(snippet) || snippet.script)}</div>`,
+          )
+          .join("")
+      : `<div class="cmd-empty">${t("No snippets in this category.")}</div>`
+    : `<div class="cmd-empty">${t("No snippets saved. Add snippets in the Snippets page.")}</div>`;
+  return `
+    <section class="cmd-list-pane" id="commandListPane">
+      <div class="cmd-categories" role="tablist">
+        ${categories
+          .map(
+            (category) => `
+            <button class="cmd-category ${category.id === state.cmdCategory ? "active" : ""}" role="tab" data-cmd-category="${escapeAttr(category.id)}">
+              ${groupIcon()}<span class="truncate-text">${escapeHtml(category.name)}</span><span class="cmd-count">${category.count}</span>
+            </button>`,
+          )
+          .join("")}
+      </div>
+      <div class="cmd-list">${list}</div>
+      <div class="cmd-actions">
+        <span class="cmd-hint">${t("Double-click a snippet to send it.")}</span>
+        <button class="btn primary" data-cmd-send-snippet ${state.cmdSelectedSnippetId && state.activeShellId ? "" : "disabled"}>${t("Send")}</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderCommandEditorActions() {
+  const options = [
+    ["ctrlEnter", t("Send with Ctrl+Enter")],
+    null,
+    ["clearAfterSend", t("Clear after sending")],
+    ["appendCr", t("Append carriage return (CR)")],
+  ];
+  return `
+    <div class="cmd-options-wrap">
+      <button class="btn ${state.cmdOptionsOpen ? "primary" : "ghost strong"}" data-cmd-options-toggle aria-expanded="${state.cmdOptionsOpen}">${t("Options")}</button>
+      ${
+        state.cmdOptionsOpen
+          ? `<div class="dropdown-menu cmd-options-menu" role="menu">
+              ${options
+                .map((option) =>
+                  option
+                    ? `<button role="menuitemcheckbox" aria-checked="${Boolean(state.cmdOptions[option[0]])}" data-cmd-option="${option[0]}">
+                        <span class="cmd-check">${state.cmdOptions[option[0]] ? checkIcon() : ""}</span><span>${escapeHtml(option[1])}</span>
+                      </button>`
+                    : `<div class="cmd-menu-divider" role="separator"></div>`,
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
+    </div>
+    <button class="btn primary" data-cmd-send-editor ${state.activeShellId ? "" : "disabled"}>${t("Send")}</button>
+  `;
+}
+
+function selectCommandSnippet(id) {
+  state.cmdSelectedSnippetId = id;
+  document.querySelectorAll(".cmd-panel [data-cmd-snippet]").forEach((el) => {
+    el.classList.toggle("selected", el.dataset.cmdSnippet === id);
+  });
+  const send = document.querySelector("[data-cmd-send-snippet]");
+  if (send) send.disabled = !state.activeShellId;
+}
+
+// Repaint pieces of the panel in place: a full render() would rebuild the
+// terminal area and lose the editor's caret.
+function repaintCommandList() {
+  const pane = document.getElementById("commandListPane");
+  if (pane) pane.outerHTML = renderCommandListPane();
+}
+
+function repaintCommandEditorActions() {
+  const actions = document.getElementById("commandEditorActions");
+  if (actions) actions.innerHTML = renderCommandEditorActions();
+}
+
+async function sendCommandText(text, { appendCr }) {
+  if (!state.activeShellId) return false;
+  // Each line of a multi-line command is submitted like pressing Enter.
+  let data = String(text || "").replace(/\r\n|\n/g, "\r");
+  if (!data.trim()) return false;
+  if (appendCr && !data.endsWith("\r")) data += "\r";
+  const host = state.activeHost || { name: "Local Terminal", username: "local" };
+  data
+    .split("\r")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      pushLog("Command", line, host);
+      recordShellHistory(line);
+    });
+  await sendShellInput(data);
+  return true;
+}
+
+async function sendSelectedSnippet() {
+  const snippet = state.snippets.find((item) => item.id === state.cmdSelectedSnippetId);
+  if (snippet) await sendCommandText(snippet.script, { appendCr: true });
+}
+
+async function sendCommandEditor() {
+  const editor = document.getElementById("commandEditor");
+  const text = editor ? editor.value : state.cmdEditorText;
+  const sent = await sendCommandText(text, { appendCr: state.cmdOptions.appendCr });
+  if (sent && state.cmdOptions.clearAfterSend) {
+    state.cmdEditorText = "";
+    if (editor) editor.value = "";
+  }
+  editor?.focus();
+}
+
+// "Remove" beside the snippet's package field: back to Default on save.
+function bindPackageFieldEvents() {
+  const sync = () => {
+    const input = document.getElementById("snippetPackage");
+    const button = document.querySelector("[data-package-remove]");
+    if (input && button) button.hidden = !input.value.trim();
+  };
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-package-remove]")) return;
+    const input = document.getElementById("snippetPackage");
+    if (!input) return;
+    input.value = "";
+    input.closest(".md-combo")?.classList.remove("has-value");
+    if (state.editingSnippet) state.editingSnippet.packageName = "";
+    closeCombo();
+    sync();
+  });
+  document.addEventListener("input", (event) => {
+    if (event.target.id === "snippetPackage") sync();
+  });
+  document.addEventListener("change", (event) => {
+    if (event.target.id === "snippetPackage") sync();
+  });
+}
+
+function bindCommandPanelEvents() {
+  document.addEventListener("click", (event) => {
+    const panel = event.target.closest(".cmd-panel");
+    if (state.cmdOptionsOpen && !event.target.closest(".cmd-options-wrap")) {
+      state.cmdOptionsOpen = false;
+      repaintCommandEditorActions();
+    }
+    if (!panel) return;
+    const category = event.target.closest("[data-cmd-category]");
+    if (category) {
+      state.cmdCategory = category.dataset.cmdCategory;
+      state.cmdSelectedSnippetId = null;
+      return repaintCommandList();
+    }
+    const item = event.target.closest("[data-cmd-snippet]");
+    if (item) return selectCommandSnippet(item.dataset.cmdSnippet);
+    if (event.target.closest("[data-cmd-send-snippet]")) return sendSelectedSnippet();
+    if (event.target.closest("[data-cmd-send-editor]")) return sendCommandEditor();
+    if (event.target.closest("[data-cmd-options-toggle]")) {
+      state.cmdOptionsOpen = !state.cmdOptionsOpen;
+      return repaintCommandEditorActions();
+    }
+    const option = event.target.closest("[data-cmd-option]");
+    if (option) {
+      const key = option.dataset.cmdOption;
+      state.cmdOptions[key] = !state.cmdOptions[key];
+      persistCommandEditorOptions();
+      repaintCommandEditorActions();
+    }
+  });
+
+  document.addEventListener("dblclick", (event) => {
+    const item = event.target.closest(".cmd-panel [data-cmd-snippet]");
+    if (!item) return;
+    selectCommandSnippet(item.dataset.cmdSnippet);
+    sendSelectedSnippet();
+  });
+
+  document.addEventListener("input", (event) => {
+    if (event.target.id === "commandEditor") state.cmdEditorText = event.target.value;
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.target.id !== "commandEditor") return;
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && state.cmdOptions.ctrlEnter) {
+      event.preventDefault();
+      sendCommandEditor();
+    }
+  });
 }
 
 function renderDetailsPanel() {
@@ -4343,6 +4997,7 @@ function renderDetailsPanel() {
   if (state.detailKind === "key") return renderKeyDetails();
   if (state.detailKind === "identity") return renderIdentityDetails();
   if (state.detailKind === "snippet") return renderSnippetDetails();
+  if (state.detailKind === "package") return renderPackageDetails();
   if (state.detailKind === "shellHistory") return renderShellHistoryPanel();
   if (state.detailKind === "group") return renderGroupDetails();
   return renderHostDetails();
@@ -4463,6 +5118,7 @@ function renderSnippetDetails() {
   const snippet = state.editingSnippet || emptySnippet();
   const isEdit = state.editingSnippetIndex >= 0;
   const title = isEdit ? "Edit Snippet" : "New Snippet";
+  const snippetPackageName = snippet.packageName ?? packageById(snippet.packageId)?.name ?? "";
   return `
     <aside class="details-panel">
       <div class="details-head">
@@ -4479,7 +5135,17 @@ function renderSnippetDetails() {
             <input id="snippetName" value="${escapeAttr(snippet.name || "")}" placeholder="${t("Example: check network load")}" />
           </div>
           <div class="detail-field">
-            <input class="snippet-package-placeholder" value="" placeholder="${t("Add a Package")}" disabled />
+            <label>${t("Package")}</label>
+            <div class="package-field-row">
+              ${renderMdCombo(
+                "snippetPackage",
+                applySort(state.snippetPackages, (pkg) => pkg.name).map((pkg) => ({ value: pkg.name, label: pkg.name })),
+                snippetPackageName,
+                { placeholder: t("Add a Package"), icon: packageIcon(), clearable: false },
+              )}
+              <button type="button" class="btn ghost package-remove-btn" data-package-remove ${snippetPackageName ? "" : "hidden"}>${t("Remove")}</button>
+            </div>
+            <div class="field-hint">${t("Pick a package, or type a new name to create one.")}</div>
           </div>
           <div class="detail-field">
             <label>${t("Script *")}</label>
@@ -4912,6 +5578,7 @@ function selectCard(type, id) {
   state.selectedKeyId = type === "key" ? id : null;
   state.selectedIdentityId = type === "identity" ? id : null;
   state.selectedSnippetId = type === "snippet" ? id : null;
+  state.selectedPackageId = type === "package" ? id : null;
   state.selectedKnownHostId = type === "known_host" ? id : null;
 }
 
@@ -4953,6 +5620,7 @@ function bindEvents() {
           break;
         case "nav":
           state.section = element.dataset.section;
+          state.openedPackageId = null;
           state.search = "";
           state.showSearch = false;
           state.sortMenuOpen = false;
@@ -5301,6 +5969,42 @@ function bindEvents() {
           closeMenus();
           await createSnippet();
           break;
+        case "toggle-snippet-menu":
+          state.snippetMenuOpen = !state.snippetMenuOpen;
+          render();
+          break;
+        case "show-all-snippets":
+          state.openedPackageId = null;
+          render();
+          break;
+        case "new-snippet-package":
+          closeMenus();
+          openPackageDetails();
+          break;
+        case "edit-package": {
+          const pkg = packageById(element.dataset.packageId);
+          if (pkg) openPackageDetails(pkg);
+          break;
+        }
+        case "save-package":
+          savePackageDetails();
+          render();
+          break;
+        case "remove-editing-package":
+          if (state.editingPackage) await removePackage(state.editingPackage.id);
+          break;
+        case "ctx-edit-package": {
+          const pkg = packageById(state.contextMenu?.id);
+          state.contextMenu = null;
+          if (pkg) openPackageDetails(pkg);
+          break;
+        }
+        case "ctx-remove-package": {
+          const id = state.contextMenu?.id;
+          state.contextMenu = null;
+          if (id) await removePackage(id);
+          break;
+        }
         case "edit-snippet": {
           const snippet = state.snippets.find((s) => s.id === element.dataset.snippetId);
           if (snippet) openSnippetDetails(snippet);
@@ -5442,14 +6146,6 @@ function bindEvents() {
           render();
           break;
         }
-        case "run-snippet": {
-          const snippet = state.snippets.find((s) => s.id === element.dataset.snippetId);
-          if (snippet) {
-            state.commandInput = snippet.script;
-            runTerminalCommand();
-          }
-          break;
-        }
       }
     });
   });
@@ -5568,6 +6264,26 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll(".package-card[data-package-id]").forEach((card) => {
+    card.addEventListener("click", () => {
+      selectCard("package", card.dataset.packageId);
+      state.contextMenu = null;
+      render();
+    });
+    card.addEventListener("dblclick", () => {
+      if (!packageById(card.dataset.packageId)) return;
+      state.openedPackageId = card.dataset.packageId;
+      state.selectedPackageId = null;
+      render();
+    });
+    card.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      selectCard("package", card.dataset.packageId);
+      state.contextMenu = { kind: "package", id: card.dataset.packageId, x: event.clientX, y: event.clientY };
+      render();
+    });
+  });
+
   document.querySelectorAll(".known-host-card[data-known-host-id]").forEach((card) => {
     card.addEventListener("click", () => {
       selectCard("known_host", card.dataset.knownHostId);
@@ -5631,16 +6347,16 @@ function bindEvents() {
         return;
       }
       
-      const isCard = event.target.closest(".host-card,.group-card,.key-card,.identity-card,.snippet-card,.known-host-card");
+      const isCard = event.target.closest(".host-card,.group-card,.key-card,.identity-card,.snippet-card,.package-card,.known-host-card");
       if (!isCard && !event.target.closest("button") && !event.target.closest(".dropdown-menu") && !event.target.closest(".context-menu") && !event.target.closest(".toolstrip")) {
-        let changed = state.selectedHostId || state.selectedGroup || state.selectedKeyId || state.selectedIdentityId || state.selectedSnippetId || state.selectedKnownHostId;
+        let changed = state.selectedHostId || state.selectedGroup || state.selectedKeyId || state.selectedIdentityId || state.selectedSnippetId || state.selectedPackageId || state.selectedKnownHostId;
         selectCard(null, null);
         if (changed && !state.detailOpen) render();
       }
 
       if (!state.detailOpen) return;
       const keepOpen = event.target.closest(
-        "button,input,select,textarea,.details-panel,.host-card,.group-card,.key-card,.identity-card,.snippet-card,.known-host-card,.key-dropzone,.breadcrumb,.dropdown-menu,.context-menu,.search-row,.toolstrip,.section-head",
+        "button,input,select,textarea,.details-panel,.host-card,.group-card,.key-card,.identity-card,.snippet-card,.package-card,.known-host-card,.key-dropzone,.breadcrumb,.dropdown-menu,.context-menu,.search-row,.toolstrip,.section-head",
       );
       if (!keepOpen) closeEditor();
     });
