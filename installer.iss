@@ -1,11 +1,11 @@
 #ifndef AppVersion
-  #define AppVersion "0.3.1"
+  #define AppVersion "0.3.2"
 #endif
 #ifndef OutputDir
   #define OutputDir "final\releases"
 #endif
 #ifndef OutputBaseFilename
-  #define OutputBaseFilename "VPS-Studio-v0.3.1-Setup"
+  #define OutputBaseFilename "VPS-Studio-v0.3.2-Setup"
 #endif
 #ifndef SourceExe
   #define SourceExe "final\releases\vps-studio.exe"

@@ -1,6 +1,6 @@
 [package]
 name = "vps-studio"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 authors = ["Caesars Network LLC"]
 description = "A modern, high-performance, fully local server management & SSH client."
