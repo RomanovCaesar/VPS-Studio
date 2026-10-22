@@ -11,8 +11,9 @@ on:
         required: false
         default: ''
 
+# Read-only by default; only the release job below can write.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-windows:
@@ -33,13 +34,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Extract version info
         id: get_version
         shell: pwsh
+        env:
+          RAW_TAG: ${{ inputs.tag_name || github.ref_name }}
         run: |
-          $tag = "${{ inputs.tag_name || github.ref_name }}"
+          $tag = $env:RAW_TAG
           if (-not $tag -or $tag -eq "main" -or $tag -eq "master") {
               $tag = "v0.3.3"
           }
@@ -50,7 +53,7 @@ jobs:
           Write-Host "Configured Release Version: $versionWithV (Numeric: $versionNumber)"
 
       - name: Setup MSVC Developer Command Prompt
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
         with:
           arch: ${{ matrix.msvc_arch }}
 
@@ -60,12 +63,13 @@ jobs:
           Remove-Item 'C:\Program Files\Git\usr\bin\link.exe' -Force -ErrorAction SilentlyContinue
 
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: stable
           targets: ${{ matrix.target }}
 
       - name: Rust Cache
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           key: ${{ matrix.target }}
 
@@ -123,7 +127,7 @@ jobs:
           Get-ChildItem dist_artifacts
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: artifacts-windows-${{ matrix.arch }}
           path: dist_artifacts/*
@@ -143,13 +147,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Extract version info
         id: get_version
         shell: bash
+        env:
+          RAW_TAG: ${{ inputs.tag_name || github.ref_name }}
         run: |
-          tag="${{ inputs.tag_name || github.ref_name }}"
+          tag="$RAW_TAG"
           if [ -z "$tag" ] || [ "$tag" = "main" ] || [ "$tag" = "master" ]; then
               tag="v0.3.3"
           fi
@@ -164,12 +170,13 @@ jobs:
           echo "Configured Release Version: $version_with_v (Numeric: $version_number)"
 
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: stable
           targets: ${{ matrix.target }}
 
       - name: Rust Cache
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           key: ${{ matrix.target }}
 
@@ -243,7 +250,7 @@ jobs:
           ls -lh dist_artifacts/
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: artifacts-macos-${{ matrix.arch }}
           path: dist_artifacts/*
@@ -257,13 +264,15 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Resolve Release Tag
         id: resolve_tag
         shell: bash
+        env:
+          RAW_TAG: ${{ inputs.tag_name || github.ref_name }}
         run: |
-          TAG="${{ inputs.tag_name || github.ref_name }}"
+          TAG="$RAW_TAG"
           if [ -z "$TAG" ] || [ "$TAG" = "main" ] || [ "$TAG" = "master" ]; then
             TAG="v0.3.3"
           fi
@@ -274,7 +283,7 @@ jobs:
           echo "Release tag: $TAG"
 
       - name: Download Build Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: downloaded_artifacts
           merge-multiple: true
@@ -285,7 +294,7 @@ jobs:
           ls -lh downloaded_artifacts/
 
       - name: Create or Update GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ env.TAG_NAME }}
           name: VPS Studio ${{ env.TAG_NAME }}
