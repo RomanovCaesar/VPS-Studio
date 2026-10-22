@@ -2803,3 +2803,83 @@ body.dragging-snippet .package-card.drop-target {
     transform: scale(1);
   }
 }
+
+/* Host key changed warning (MD3 error colours) */
+.hostkey-overlay {
+  z-index: 3100;
+}
+
+.hostkey-dialog {
+  width: min(600px, calc(100vw - 48px));
+  border-color: var(--md-sys-color-error);
+}
+
+.hostkey-header {
+  background: color-mix(in srgb, var(--md-sys-color-error) 12%, transparent);
+}
+
+.hostkey-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--md-sys-color-error);
+}
+
+.hostkey-icon {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+}
+
+.hostkey-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.hostkey-dialog .delete-dialog-body p {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.hostkey-host {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.hostkey-row {
+  margin-bottom: 12px;
+}
+
+.hostkey-label {
+  margin-bottom: 4px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hostkey-fp {
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-surface-container-highest);
+  font-family: "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  word-break: break-all;
+  user-select: all;
+}
+
+.hostkey-fp.old {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.hostkey-fp.new {
+  color: var(--md-sys-color-error);
+}
+
+.hostkey-advice {
+  font-weight: 600;
+}
+
+.btn.hostkey-accept {
+  color: var(--md-sys-color-error);
+}

@@ -1734,7 +1734,8 @@ async function openLocalPowershell() {
   }
 }
 
-async function connectHost(host, ignoreKnownHosts = false) {
+// acceptFingerprint: the unknown host key the user chose to trust once ("Continue").
+async function connectHost(host, acceptFingerprint = null) {
   if (!host) return;
   const profile = profileForConnection(host);
   if (profile.auth.kind === "keyRef") return setStatus(t("Choose a key from Keychain first"));
@@ -1767,7 +1768,7 @@ async function connectHost(host, ignoreKnownHosts = false) {
       profile: state.activeHost,
       cols,
       rows,
-      ignoreKnownHosts,
+      acceptFingerprint,
     });
     state.connection = summary;
     state.shellHealthy = true;
@@ -1783,15 +1784,53 @@ async function connectHost(host, ignoreKnownHosts = false) {
     refreshMetrics();
     refreshSftp(state.remotePath);
   } catch (error) {
-    if (typeof error === "string" && error.startsWith("UNTRUSTED_HOST:")) {
-      const fingerprint = error.substring("UNTRUSTED_HOST:".length);
-      state.untrustedHostPrompt = { host: profile, fingerprint };
+    const hostKey = parseHostKeyError(error);
+    if (hostKey?.kind === "unknown") {
+      state.untrustedHostPrompt = { host: profile, fingerprint: hostKey.fingerprint, algorithm: hostKey.algorithm };
       render();
+      return;
+    }
+    if (hostKey?.kind === "changed") {
+      appendTerminalOutput(`[vps-studio] ${t("Connection refused: the host key has changed.")}\r\n`);
+      pushLog("SSH", `Host key changed for ${profile.host}:${profile.port}; connection refused.`, profile);
+      state.hostKeyChangedPrompt = { host: profile, ...hostKey };
+      setStatus(t("Connection refused: the host key has changed."));
       return;
     }
     appendTerminalOutput(`[vps-studio] connection failed: ${error}\r\n`);
     pushLog("SSH", `Connection failed: ${error}`, profile);
     setStatus(t("Connection failed: {0}", error), { terminalBottom: true, focusCommand: true });
+  }
+}
+
+// Host key errors from the backend:
+//   UNTRUSTED_HOST:<fingerprint>|<algorithm>
+//   HOST_KEY_CHANGED:<fingerprint>|<algorithm>|<expected,...>
+function parseHostKeyError(error) {
+  const text = String(error || "");
+  const match = text.match(/(UNTRUSTED_HOST|HOST_KEY_CHANGED):([^|\s]+)\|([^|\s]*)(?:\|(\S*))?/);
+  if (!match) return null;
+  return {
+    kind: match[1] === "UNTRUSTED_HOST" ? "unknown" : "changed",
+    fingerprint: match[2],
+    algorithm: match[3] || "",
+    expected: match[4] ? match[4].split(",").filter(Boolean) : [],
+  };
+}
+
+// Readable text for errors shown in the status bar (SFTP, metrics...).
+function friendlyError(error) {
+  const hostKey = parseHostKeyError(error);
+  if (hostKey?.kind === "changed") return t("Connection refused: the host key has changed.");
+  if (hostKey?.kind === "unknown") return t("The host key is not trusted yet.");
+  return String(error);
+}
+
+async function refreshKnownHosts() {
+  try {
+    state.knownHosts = (await call("load_known_hosts")) || [];
+  } catch {
+    // keep the list we have
   }
 }
 
@@ -1815,7 +1854,7 @@ async function reconnectShell(reason = "") {
     render({ terminalBottom: true, focusTerminal: true });
     return true;
   } catch (error) {
-    state.status = t("Reconnect failed: {0}", error);
+    state.status = t("Reconnect failed: {0}", friendlyError(error));
     pushLog("SSH", `Reconnect failed: ${error}`, host);
     render({ terminalBottom: true, focusTerminal: true });
     return false;
@@ -2638,7 +2677,7 @@ async function refreshMetrics() {
 
     refreshMonitorPanel();
   } catch (error) {
-    state.status = t("Metrics failed: {0}", error);
+    state.status = t("Metrics failed: {0}", friendlyError(error));
     render();
   }
 }
@@ -2667,7 +2706,7 @@ async function refreshSftp(path = state.remotePath) {
     if (!samePath || !present.has(state.sftpAnchor)) state.sftpAnchor = null;
     render();
   } catch (error) {
-    state.status = t("SFTP failed: {0}", error);
+    state.status = t("SFTP failed: {0}", friendlyError(error));
     render();
   }
 }
@@ -3596,6 +3635,7 @@ function render(options = {}) {
       <div class="workspace" style="position: relative;">
         ${workspace}
         ${state.untrustedHostPrompt ? renderUntrustedHostPrompt() : ""}
+        ${state.hostKeyChangedPrompt ? renderHostKeyChangedPrompt() : ""}
       </div>
     </div>
     ${renderDeleteDialog()}
@@ -3676,6 +3716,38 @@ function renderTopbar() {
   `;
 }
 
+function renderHostKeyChangedPrompt() {
+  const p = state.hostKeyChangedPrompt;
+  const fingerprintRow = (label, value, tone) => `
+    <div class="hostkey-row">
+      <div class="hostkey-label">${escapeHtml(label)}</div>
+      <code class="hostkey-fp ${tone}">${escapeHtml(value)}</code>
+    </div>`;
+  return `
+    <div class="delete-dialog-overlay hostkey-overlay">
+      <section class="delete-dialog hostkey-dialog" role="alertdialog" aria-modal="true" aria-labelledby="hostKeyChangedTitle">
+        <header class="delete-dialog-header hostkey-header">
+          <div class="hostkey-title">
+            <span class="hostkey-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+            <h2 id="hostKeyChangedTitle">${t("Warning: the host key has changed")}</h2>
+          </div>
+        </header>
+        <div class="delete-dialog-body">
+          <p class="hostkey-host"><strong>${escapeHtml(p.host.name || p.host.host)}</strong> · ${escapeHtml(p.host.host)}:${p.host.port}</p>
+          <p>${t("The key this server presented is different from the one saved in Known Hosts. Someone may be intercepting the connection (a man-in-the-middle attack), or the server's key may have changed legitimately, for example after the server was reinstalled.")}</p>
+          ${p.expected.map((fp) => fingerprintRow(t("Saved fingerprint"), fp, "old")).join("")}
+          ${fingerprintRow(t("{0} key now presented", p.algorithm || "SSH"), p.fingerprint, "new")}
+          <p class="hostkey-advice">${t("The connection was refused and nothing was sent to the server. Only accept the new key if you know why it changed, for example by checking the fingerprint with the server's administrator.")}</p>
+        </div>
+        <footer class="delete-dialog-footer">
+          <button class="btn ghost hostkey-accept" data-action="hostkey-changed-accept">${t("Trust new key and connect")}</button>
+          <button class="btn primary" data-action="hostkey-changed-close">${t("Close")}</button>
+        </footer>
+      </section>
+    </div>
+  `;
+}
+
 function renderUntrustedHostPrompt() {
   const p = state.untrustedHostPrompt;
   return `
@@ -3690,7 +3762,7 @@ function renderUntrustedHostPrompt() {
         </div>
         <h3 style="margin-bottom:14px; font-size:18px; font-weight:700; color: var(--md-sys-color-on-surface);">${t("Are you sure you want to connect?")}</h3>
         <p style="margin-bottom:12px; font-size:13.5px; color: var(--md-sys-color-on-surface-variant);">${t("The authenticity of")} <strong style="color: var(--md-sys-color-on-surface);">${escapeHtml(p.host.host)}</strong> ${t("can not be established.")}</p>
-        <p style="margin-bottom:16px; font-size:13px; color: var(--md-sys-color-on-surface-variant);">${t("ECDSA fingerprint is SHA256:")}<br/><strong style="word-break:break-all; user-select:all; color: var(--md-sys-color-primary); font-family: 'Cascadia Code', 'SF Mono', monospace; font-size: 12px; display: inline-block; margin-top: 4px;">${escapeHtml(p.fingerprint)}</strong></p>
+        <p style="margin-bottom:16px; font-size:13px; color: var(--md-sys-color-on-surface-variant);">${escapeHtml(t("{0} key fingerprint:", p.algorithm || "SSH"))}<br/><strong style="word-break:break-all; user-select:all; color: var(--md-sys-color-primary); font-family: 'Cascadia Code', 'SF Mono', monospace; font-size: 12px; display: inline-block; margin-top: 4px;">${escapeHtml(p.fingerprint)}</strong></p>
         <p style="margin-bottom:28px; font-size:13.5px; color: var(--md-sys-color-on-surface);">${t("Do you want to add it to the list of known hosts?")}</p>
         <div class="form-actions" style="display: flex; justify-content: center; gap:12px;">
           <button class="btn ghost" data-action="untrusted-close">${t("Close")}</button>
@@ -5991,9 +6063,9 @@ function bindEvents() {
           render();
           break;
         case "untrusted-continue": {
-          const host = state.untrustedHostPrompt.host;
+          const p = state.untrustedHostPrompt;
           state.untrustedHostPrompt = null;
-          connectHost(host, true);
+          connectHost(p.host, p.fingerprint);
           break;
         }
         case "untrusted-add": {
@@ -6003,13 +6075,32 @@ function bindEvents() {
           render();
           try {
             await call("add_known_host", { host: p.host.host, port: p.host.port, fingerprint: p.fingerprint });
-            // 更新本地已知主机的状态
-            state.knownHosts = state.knownHosts || [];
-            state.knownHosts.unshift({ id: `host-${Date.now()}`, host: p.host.host, port: p.host.port, fingerprint: p.fingerprint });
+            await refreshKnownHosts();
           } catch (e) {
             console.error("Failed to add known host", e);
           }
-          connectHost(p.host, true);
+          // Still pass the fingerprint, so the connection succeeds even if saving failed.
+          connectHost(p.host, p.fingerprint);
+          break;
+        }
+        case "hostkey-changed-close":
+          state.hostKeyChangedPrompt = null;
+          state.view = "dashboard";
+          render();
+          break;
+        case "hostkey-changed-accept": {
+          const p = state.hostKeyChangedPrompt;
+          state.hostKeyChangedPrompt = null;
+          try {
+            // Replaces the stored key for this host and port.
+            await call("add_known_host", { host: p.host.host, port: p.host.port, fingerprint: p.fingerprint });
+            await refreshKnownHosts();
+            pushLog("SSH", `Accepted new host key for ${p.host.host}:${p.host.port}.`, p.host);
+          } catch (e) {
+            setStatus(t("Save failed: {0}", e));
+            break;
+          }
+          connectHost(p.host);
           break;
         }
         case "save-connect": {
@@ -6163,8 +6254,10 @@ function bindEvents() {
           try {
             const newHosts = await call("import_known_hosts");
             if (newHosts && newHosts.length) {
-              const existingIds = new Set((state.knownHosts || []).map(h => h.id));
-              state.knownHosts = [...[...newHosts].reverse(), ...(state.knownHosts || [])];
+              const keyOf = (h) => `${String(h.host).toLowerCase()}:${h.port}:${h.fingerprint || ""}`;
+              const existing = new Set((state.knownHosts || []).map(keyOf));
+              const fresh = newHosts.filter((h) => !existing.has(keyOf(h)));
+              state.knownHosts = [...[...fresh].reverse(), ...(state.knownHosts || [])];
               await call("save_known_hosts", { hosts: state.knownHosts });
             }
           } catch (e) {

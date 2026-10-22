@@ -54,7 +54,12 @@ pub fn import_known_hosts() -> Result<Vec<KnownHost>, String> {
     let Ok(content) = fs::read_to_string(ssh_known) else {
         return Ok(Vec::new());
     };
+    Ok(parse_openssh_known_hosts(&content))
+}
 
+/// Parse an OpenSSH known_hosts file. Hashed names (`|1|...`) and marker
+/// lines (`@cert-authority`, `@revoked`) are skipped.
+fn parse_openssh_known_hosts(content: &str) -> Vec<KnownHost> {
     let mut new_hosts = Vec::new();
     for line in content.lines() {
         let line = line.trim();
@@ -70,38 +75,52 @@ pub fn import_known_hosts() -> Result<Vec<KnownHost>, String> {
             continue;
         }
 
-        let first_host = host_part.split(',').next().unwrap_or(host_part);
-        let mut host = first_host.to_owned();
-        let mut port = 22;
+        // "<hosts> <key-type> <base64-key>": store the key's SHA256 fingerprint
+        // so connections can be verified against it.
+        let fingerprint = match (parts.get(1), parts.get(2)) {
+            (Some(kind), Some(data)) => ssh_key::PublicKey::from_openssh(&format!("{kind} {data}"))
+                .ok()
+                .map(|key| key.fingerprint(ssh_key::HashAlg::Sha256).to_string()),
+            _ => None,
+        };
+        if fingerprint.is_none() {
+            continue;
+        }
 
-        if host.starts_with('[') {
-            if let Some(end_idx) = host.find(']') {
-                let ip = host[1..end_idx].to_owned();
-                let rest = &host[end_idx + 1..];
-                if rest.starts_with(':') {
-                    if let Ok(p) = rest[1..].parse::<u16>() {
+        for name in host_part.split(',') {
+            let mut host = name.to_owned();
+            let mut port = 22;
+            if host.starts_with('[') {
+                if let Some(end_idx) = host.find(']') {
+                    let ip = host[1..end_idx].to_owned();
+                    let rest = &host[end_idx + 1..];
+                    if let Some(p) = rest.strip_prefix(':').and_then(|p| p.parse::<u16>().ok()) {
                         port = p;
                     }
+                    host = ip;
                 }
-                host = ip;
             }
+            new_hosts.push(KnownHost {
+                id: crate::models::new_id(),
+                host,
+                port,
+                fingerprint: fingerprint.clone(),
+            });
         }
-        
-        new_hosts.push(KnownHost {
-            id: crate::models::new_id(),
-            host,
-            port,
-            fingerprint: None,
-        });
     }
 
     new_hosts.reverse();
-    Ok(new_hosts)
+    new_hosts
 }
 
 #[tauri::command]
 pub fn add_known_host(host: String, port: u16, fingerprint: String) -> Result<(), String> {
     let mut hosts = load_known_hosts_inner().unwrap_or_default();
+    // Trusting a key replaces whatever was stored for this host and port:
+    // legacy entries without a fingerprint, or the old key after a change.
+    let id = |h: &str, p: u16| format!("{}:{p}", h.trim().to_ascii_lowercase());
+    let wanted = id(&host, port);
+    hosts.retain(|kh| id(&kh.host, kh.port) != wanted);
     hosts.insert(0, KnownHost {
         id: crate::models::new_id(),
         host,
@@ -191,4 +210,34 @@ fn normalize_legacy_config(mut value: Value) -> Value {
     }
 
     value
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_openssh_known_hosts;
+
+    // github.com's published Ed25519 host key and its published fingerprint.
+    const GITHUB_ED25519: &str =
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl";
+    const GITHUB_FP: &str = "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU";
+
+    #[test]
+    fn imported_hosts_carry_the_key_fingerprint() {
+        let content = format!(
+            "# comment\ngithub.com,140.82.112.3 {GITHUB_ED25519}\n[vps.example]:2222 {GITHUB_ED25519}\n\
+             |1|hashed= {GITHUB_ED25519}\n@cert-authority *.example {GITHUB_ED25519}\nbroken.example ssh-ed25519 not-base64\n"
+        );
+        let hosts = parse_openssh_known_hosts(&content);
+        let got: Vec<(String, u16, Option<String>)> =
+            hosts.into_iter().map(|h| (h.host, h.port, h.fingerprint)).collect();
+        let fp = Some(GITHUB_FP.to_owned());
+        assert_eq!(
+            got,
+            vec![
+                ("vps.example".into(), 2222, fp.clone()),
+                ("140.82.112.3".into(), 22, fp.clone()),
+                ("github.com".into(), 22, fp),
+            ]
+        );
+    }
 }

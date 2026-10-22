@@ -71,8 +71,77 @@ fi
 struct Client {
     host: String,
     port: u16,
-    ignore_known_hosts: bool,
-    untrusted_fingerprint: Arc<tokio::sync::Mutex<Option<String>>>,
+    /// Fingerprint the user explicitly accepted for an unknown host ("Continue").
+    accept_fingerprint: Option<String>,
+    /// Why the host key was rejected, reported back to the UI.
+    host_key_problem: Arc<tokio::sync::Mutex<Option<HostKeyProblem>>>,
+}
+
+/// A rejected host key, turned into an error string the UI understands:
+/// `UNTRUSTED_HOST:<fingerprint>|<algorithm>` or
+/// `HOST_KEY_CHANGED:<fingerprint>|<algorithm>|<expected,...>`.
+#[derive(Debug, Clone)]
+enum HostKeyProblem {
+    Unknown { fingerprint: String, algorithm: String },
+    Changed { fingerprint: String, algorithm: String, expected: Vec<String> },
+}
+
+impl HostKeyProblem {
+    fn to_error(&self) -> String {
+        match self {
+            HostKeyProblem::Unknown { fingerprint, algorithm } => {
+                format!("UNTRUSTED_HOST:{fingerprint}|{algorithm}")
+            }
+            HostKeyProblem::Changed { fingerprint, algorithm, expected } => {
+                format!("HOST_KEY_CHANGED:{fingerprint}|{algorithm}|{}", expected.join(","))
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum HostKeyVerdict {
+    Trusted,
+    Unknown,
+    Changed(Vec<String>),
+}
+
+/// Fingerprints accepted with "Continue" but not saved, kept for this run of
+/// the app so the SFTP / metrics connections to the same host are verified too.
+static SESSION_TRUSTED_KEYS: std::sync::LazyLock<StdMutex<HashMap<String, String>>> =
+    std::sync::LazyLock::new(|| StdMutex::new(HashMap::new()));
+
+fn host_key_id(host: &str, port: u16) -> String {
+    format!("{}:{port}", host.trim().to_ascii_lowercase())
+}
+
+/// Compare a server's fingerprint with Known Hosts (and keys accepted earlier
+/// in this session). A stored fingerprint that differs means the key changed.
+fn verify_host_key(
+    known_hosts: &[crate::models::KnownHost],
+    session_key: Option<&str>,
+    host: &str,
+    port: u16,
+    fingerprint: &str,
+) -> HostKeyVerdict {
+    let id = host_key_id(host, port);
+    let expected: Vec<String> = known_hosts
+        .iter()
+        .filter(|kh| host_key_id(&kh.host, kh.port) == id)
+        .filter_map(|kh| kh.fingerprint.clone())
+        .collect();
+    if expected.iter().any(|fp| fp == fingerprint) {
+        return HostKeyVerdict::Trusted;
+    }
+    if !expected.is_empty() {
+        return HostKeyVerdict::Changed(expected);
+    }
+    match session_key {
+        Some(fp) if fp == fingerprint => HostKeyVerdict::Trusted,
+        Some(fp) => HostKeyVerdict::Changed(vec![fp.to_owned()]),
+        // Not in Known Hosts, or only legacy entries saved without a fingerprint.
+        None => HostKeyVerdict::Unknown,
+    }
 }
 
 impl client::Handler for Client {
@@ -80,26 +149,31 @@ impl client::Handler for Client {
 
     async fn check_server_key(
         &mut self,
-        server_public_key: &russh::keys::PublicKey,
+        server_key: &russh::keys::PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
-        if self.ignore_known_hosts {
-            return Ok(true);
-        }
+        // russh 0.63+ also offers host certificates; both carry the host's public key.
+        let key = server_key.public_key();
+        let fingerprint = key.fingerprint(ssh_key::HashAlg::Sha256).to_string();
+        let algorithm = key.algorithm().as_str().to_owned();
 
-
-        let fingerprint = server_public_key.fingerprint(ssh_key::HashAlg::Sha256).to_string();
-
-        let known_hosts_path = crate::config::known_hosts_path();
-        let content = std::fs::read_to_string(&known_hosts_path).unwrap_or_default();
+        let content = std::fs::read_to_string(crate::config::known_hosts_path()).unwrap_or_default();
         let known_hosts: Vec<crate::models::KnownHost> = serde_json::from_str(&content).unwrap_or_default();
+        let id = host_key_id(&self.host, self.port);
+        let session_key = SESSION_TRUSTED_KEYS.lock().ok().and_then(|keys| keys.get(&id).cloned());
 
-        for kh in known_hosts {
-            if kh.host == self.host && kh.port == self.port {
+        let problem = match verify_host_key(&known_hosts, session_key.as_deref(), &self.host, self.port, &fingerprint) {
+            HostKeyVerdict::Trusted => return Ok(true),
+            // "Continue" accepts exactly the key the user was shown, never another one.
+            HostKeyVerdict::Unknown if self.accept_fingerprint.as_deref() == Some(fingerprint.as_str()) => {
+                if let Ok(mut keys) = SESSION_TRUSTED_KEYS.lock() {
+                    keys.insert(id, fingerprint);
+                }
                 return Ok(true);
             }
-        }
-
-        *self.untrusted_fingerprint.lock().await = Some(fingerprint);
+            HostKeyVerdict::Unknown => HostKeyProblem::Unknown { fingerprint, algorithm },
+            HostKeyVerdict::Changed(expected) => HostKeyProblem::Changed { fingerprint, algorithm, expected },
+        };
+        *self.host_key_problem.lock().await = Some(problem);
         Ok(false)
     }
 }
@@ -148,17 +222,17 @@ pub struct GeneratedSshKey {
 }
 
 #[tauri::command]
-pub async fn test_connection(profile: HostProfile, ignore_known_hosts: bool) -> Result<ConnectionSummary, String> {
-    let untrusted_fingerprint = Arc::new(tokio::sync::Mutex::new(None));
-    match connect_authenticated_with_timeout(&profile, Some(Duration::from_secs(10)), ignore_known_hosts, Arc::clone(&untrusted_fingerprint)).await {
+pub async fn test_connection(profile: HostProfile, accept_fingerprint: Option<String>) -> Result<ConnectionSummary, String> {
+    let host_key_problem = Arc::new(tokio::sync::Mutex::new(None));
+    match connect_authenticated_with_timeout(&profile, Some(Duration::from_secs(10)), accept_fingerprint, Arc::clone(&host_key_problem)).await {
         Ok(_) => Ok(ConnectionSummary {
             banner: "Connection successful".to_owned(),
             home_path: "".to_owned(),
             connected_at: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         }),
         Err(e) => {
-            if let Some(fp) = untrusted_fingerprint.lock().await.take() {
-                return Err(format!("UNTRUSTED_HOST:{}", fp));
+            if let Some(problem) = host_key_problem.lock().await.take() {
+                return Err(problem.to_error());
             }
             Err(e.to_string())
         }
@@ -230,18 +304,18 @@ pub async fn start_shell(
     profile: HostProfile,
     cols: Option<u32>,
     rows: Option<u32>,
-    ignore_known_hosts: bool,
+    accept_fingerprint: Option<String>,
 ) -> Result<ConnectionSummary, String> {
     async move {
         let session_id = profile.id.clone();
         stop_shell_inner(&store, &session_id).await?;
 
-        let untrusted_fingerprint = Arc::new(tokio::sync::Mutex::new(None));
-        let session = match connect_authenticated_with_timeout(&profile, None, ignore_known_hosts, Arc::clone(&untrusted_fingerprint)).await {
+        let host_key_problem = Arc::new(tokio::sync::Mutex::new(None));
+        let session = match connect_authenticated_with_timeout(&profile, None, accept_fingerprint, Arc::clone(&host_key_problem)).await {
             Ok(s) => s,
             Err(e) => {
-                if let Some(fp) = untrusted_fingerprint.lock().await.take() {
-                    return Err(anyhow::anyhow!("UNTRUSTED_HOST:{}", fp));
+                if let Some(problem) = host_key_problem.lock().await.take() {
+                    return Err(anyhow::anyhow!(problem.to_error()));
                 }
                 return Err(e);
             }
@@ -1063,16 +1137,25 @@ fn take_utf8_prefix(pending: &mut Vec<u8>) -> String {
     }
 }
 
+/// Background connections (SFTP, metrics, commands). They trust exactly the
+/// host keys the interactive session was verified with: Known Hosts, or a key
+/// accepted earlier in this run. They never prompt.
 async fn connect_authenticated(profile: &HostProfile) -> Result<client::Handle<Client>> {
-    let dummy = Arc::new(tokio::sync::Mutex::new(None));
-    connect_authenticated_with_timeout(profile, Some(Duration::from_secs(30)), true, dummy).await
+    let host_key_problem = Arc::new(tokio::sync::Mutex::new(None));
+    match connect_authenticated_with_timeout(profile, Some(Duration::from_secs(30)), None, Arc::clone(&host_key_problem)).await {
+        Ok(session) => Ok(session),
+        Err(err) => match host_key_problem.lock().await.take() {
+            Some(problem) => Err(anyhow::anyhow!(problem.to_error())),
+            None => Err(err),
+        },
+    }
 }
 
 async fn connect_authenticated_with_timeout(
     profile: &HostProfile,
     inactivity_timeout: Option<Duration>,
-    ignore_known_hosts: bool,
-    untrusted_fingerprint: Arc<tokio::sync::Mutex<Option<String>>>,
+    accept_fingerprint: Option<String>,
+    host_key_problem: Arc<tokio::sync::Mutex<Option<HostKeyProblem>>>,
 ) -> Result<client::Handle<Client>> {
     validate_profile(profile)?;
 
@@ -1084,8 +1167,8 @@ async fn connect_authenticated_with_timeout(
     let client = Client {
         host: profile.host.clone(),
         port: profile.port,
-        ignore_known_hosts,
-        untrusted_fingerprint,
+        accept_fingerprint,
+        host_key_problem,
     };
     let mut session = timeout(
         Duration::from_secs(20),
@@ -1563,6 +1646,47 @@ PROC|10240|1,5|bash
 
         let _ = child.kill();
         let _ = child.wait();
+    }
+
+    fn known(host: &str, port: u16, fingerprint: Option<&str>) -> crate::models::KnownHost {
+        crate::models::KnownHost {
+            id: "id".into(),
+            host: host.into(),
+            port,
+            fingerprint: fingerprint.map(Into::into),
+        }
+    }
+
+    #[test]
+    fn host_key_matching_fingerprint_is_trusted() {
+        let hosts = [known("example.com", 22, Some("SHA256:old")), known("Example.com", 22, Some("SHA256:new"))];
+        assert_eq!(verify_host_key(&hosts, None, "example.com", 22, "SHA256:new"), HostKeyVerdict::Trusted);
+    }
+
+    #[test]
+    fn host_key_changed_is_rejected_even_when_host_is_listed() {
+        let hosts = [known("example.com", 22, Some("SHA256:stored"))];
+        assert_eq!(
+            verify_host_key(&hosts, None, "example.com", 22, "SHA256:attacker"),
+            HostKeyVerdict::Changed(vec!["SHA256:stored".into()])
+        );
+        // Another port is a different host key entry.
+        assert_eq!(verify_host_key(&hosts, None, "example.com", 2222, "SHA256:x"), HostKeyVerdict::Unknown);
+    }
+
+    #[test]
+    fn host_key_without_stored_fingerprint_is_unknown() {
+        let hosts = [known("example.com", 22, None)];
+        assert_eq!(verify_host_key(&hosts, None, "example.com", 22, "SHA256:any"), HostKeyVerdict::Unknown);
+    }
+
+    #[test]
+    fn host_key_accepted_this_session_must_stay_the_same() {
+        assert_eq!(verify_host_key(&[], Some("SHA256:a"), "h", 22, "SHA256:a"), HostKeyVerdict::Trusted);
+        assert_eq!(
+            verify_host_key(&[], Some("SHA256:a"), "h", 22, "SHA256:b"),
+            HostKeyVerdict::Changed(vec!["SHA256:a".into()])
+        );
     }
 
     #[test]
