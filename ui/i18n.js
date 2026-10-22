@@ -18,6 +18,7 @@ const i18n = {
     "z-a": "Z-a"
   },
   "zh": {
+    "{0} can run as a program, so it was opened as text.": "{0} 是可执行的文件类型，为了安全已用文本编辑器打开。",
     "Connection refused: the host key has changed.": "已拒绝连接：主机密钥已改变。",
     "The host key is not trusted yet.": "该主机的密钥尚未被信任。",
     "{0} key fingerprint:": "{0} 密钥指纹：",
@@ -349,6 +350,7 @@ const i18n = {
     "{0} Hosts": "{0} 台主机"
   },
   "zh-TW": {
+    "{0} can run as a program, so it was opened as text.": "{0} 是可執行的檔案類型，為了安全已用文字編輯器開啟。",
     "Connection refused: the host key has changed.": "已拒絕連線：主機金鑰已變更。",
     "The host key is not trusted yet.": "此主機的金鑰尚未受信任。",
     "{0} key fingerprint:": "{0} 金鑰指紋：",
@@ -680,6 +682,7 @@ const i18n = {
     "{0} Hosts": "{0} 台主機"
   },
   "ja": {
+    "{0} can run as a program, so it was opened as text.": "{0} はプログラムとして実行される種類のファイルのため、安全のためテキストとして開きました。",
     "Connection refused: the host key has changed.": "接続を拒否しました：ホスト鍵が変更されています。",
     "The host key is not trusted yet.": "このホストの鍵はまだ信頼されていません。",
     "{0} key fingerprint:": "{0} 鍵のフィンガープリント：",
@@ -1011,6 +1014,7 @@ const i18n = {
     "{0} Hosts": "{0} 台のホスト"
   },
   "ru": {
+    "{0} can run as a program, so it was opened as text.": "{0} может запуститься как программа, поэтому открыт как текст.",
     "Connection refused: the host key has changed.": "Подключение отклонено: ключ хоста изменился.",
     "The host key is not trusted yet.": "Ключ этого хоста ещё не помечен как доверенный.",
     "{0} key fingerprint:": "Отпечаток ключа {0}:",
@@ -1342,6 +1346,7 @@ const i18n = {
     "{0} Hosts": "Хосты: {0}"
   },
   "es": {
+    "{0} can run as a program, so it was opened as text.": "{0} puede ejecutarse como un programa, así que se abrió como texto.",
     "Connection refused: the host key has changed.": "Conexión rechazada: la clave del host ha cambiado.",
     "The host key is not trusted yet.": "La clave de este host aún no es de confianza.",
     "{0} key fingerprint:": "Huella de la clave {0}:",

@@ -670,10 +670,16 @@ pub async fn open_remote_file(
             .with_context(|| format!("write {}", local_path.display()))?;
 
         let modified = file_modified_ms(&local_path).unwrap_or_else(now_ms);
+        // "Open with..." is the user's explicit choice of app. Plain "Open" must
+        // never hand a script or program to the OS default handler, which would
+        // run the server's file on this computer instead of showing it.
+        let opened_as_text = !open_with.unwrap_or(false) && is_runnable_file(&remote_path);
         if open_with.unwrap_or(false) {
             open_with_chooser(&local_path)?;
+        } else if opened_as_text {
+            open_in_text_editor(&local_path)?;
         } else {
-            let _ = open::that(&local_path);
+            open::that(&local_path).with_context(|| format!("open {}", local_path.display()))?;
         }
 
         Ok(WatchedFile {
@@ -682,6 +688,7 @@ pub async fn open_remote_file(
             original_modified_ms: modified,
             last_seen_modified_ms: modified,
             dirty: false,
+            opened_as_text,
         })
     }
     .await
@@ -790,6 +797,42 @@ async fn remove_remote_dir_all(sftp: &SftpSession, root: &str) -> Result<()> {
             .await
             .with_context(|| format!("delete remote folder {dir}"))?;
     }
+    Ok(())
+}
+
+/// File types the OS default handler would *run* rather than display:
+/// programs, installers, scripts, shortcuts and their macOS equivalents.
+const RUNNABLE_EXTENSIONS: &[&str] = &[
+    // Windows programs, installers, shortcuts, registry and control files
+    "exe", "com", "scr", "pif", "cpl", "msi", "msp", "mst", "msc", "appx", "msix", "appref-ms",
+    "lnk", "url", "reg", "inf", "scf", "library-ms", "settingcontent-ms", "gadget",
+    // Windows scripts
+    "bat", "cmd", "ps1", "psm1", "psd1", "vbs", "vbe", "js", "jse", "wsf", "wsh", "hta", "jar",
+    // Unix and cross-platform scripts (e.g. Git Bash runs .sh on double-click)
+    "sh", "bash", "zsh", "ksh", "csh", "fish", "command", "tool", "py", "pyw", "pyz", "pl", "rb",
+    "php", "lua",
+    // macOS apps, installers and scripts
+    "app", "pkg", "mpkg", "dmg", "workflow", "terminal", "scpt", "applescript",
+];
+
+/// Whether opening this remote file with the default handler would run it.
+fn is_runnable_file(remote_path: &str) -> bool {
+    let name = remote_path.rsplit('/').find(|part| !part.is_empty()).unwrap_or(remote_path);
+    // Windows ignores trailing dots and spaces: "evil.exe." runs as evil.exe.
+    let name = name.trim_end_matches(['.', ' ']);
+    name.rsplit_once('.')
+        .map(|(_, ext)| RUNNABLE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+/// Open a file as plain text, whatever its extension.
+fn open_in_text_editor(path: &Path) -> Result<()> {
+    #[cfg(target_os = "windows")]
+    Command::new("notepad.exe").arg(path).spawn().context("open Notepad")?;
+    #[cfg(target_os = "macos")]
+    Command::new("open").arg("-t").arg(path).spawn().context("open the default text editor")?;
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    bail!("cannot open {} as text: no text editor configured", path.display());
     Ok(())
 }
 
@@ -1161,6 +1204,10 @@ async fn connect_authenticated_with_timeout(
 
     let config = client::Config {
         inactivity_timeout,
+        // Idle connections are silently dropped by many routers and NATs.
+        // Ping every 30 s; give up after 3 unanswered pings (~90 s).
+        keepalive_interval: Some(Duration::from_secs(30)),
+        keepalive_max: 3,
         ..Default::default()
     };
     let address = format!("{}:{}", profile.host.trim(), profile.port);
@@ -1234,13 +1281,13 @@ async fn connect_authenticated_with_timeout(
             if private_key.trim().is_empty() {
                 bail!("private key is empty");
             }
-            let key_path = write_temp_private_key(label, private_key)?;
             let passphrase = if passphrase.trim().is_empty() {
                 None
             } else {
                 Some(passphrase.as_str())
             };
-            let key_pair_result = load_secret_key(&key_path, passphrase).with_context(|| {
+            // Decoded in memory: the private key is never written to disk.
+            let key_pair_result = russh::keys::decode_secret_key(private_key, passphrase).with_context(|| {
                 format!(
                     "load keychain private key {}",
                     if label.trim().is_empty() {
@@ -1250,7 +1297,6 @@ async fn connect_authenticated_with_timeout(
                     }
                 )
             });
-            let _ = std::fs::remove_file(&key_path);
             let key_pair = key_pair_result?;
             let rsa_hash = session
                 .best_supported_rsa_hash()
@@ -1341,20 +1387,6 @@ fn validate_profile(profile: &HostProfile) -> Result<()> {
         bail!("port must be greater than 0");
     }
     Ok(())
-}
-
-fn write_temp_private_key(label: &str, private_key: &str) -> Result<PathBuf> {
-    let dir = std::env::temp_dir().join("vps-studio").join("keychain");
-    std::fs::create_dir_all(&dir).context("create temporary key directory")?;
-    let stem = sanitize_component(if label.trim().is_empty() {
-        "keychain-key"
-    } else {
-        label.trim()
-    });
-    let path = dir.join(format!("{}-{}.key", now_ms(), stem));
-    std::fs::write(&path, private_key)
-        .with_context(|| format!("write temporary private key {}", path.display()))?;
-    Ok(path)
 }
 
 fn parse_metrics(output: &str) -> (SystemSnapshot, Option<(u64, u64)>) {
@@ -1469,7 +1501,7 @@ fn local_temp_path(host_name: &str, remote_path: &str) -> Result<PathBuf> {
         .join(format!(
             "{:x}-{}",
             stable_hash(remote_path),
-            sanitize_component(file_name)
+            sanitize_component(file_name.trim_end_matches(['.', ' ']))
         )))
 }
 
@@ -1687,6 +1719,39 @@ PROC|10240|1,5|bash
             verify_host_key(&[], Some("SHA256:a"), "h", 22, "SHA256:b"),
             HostKeyVerdict::Changed(vec!["SHA256:a".into()])
         );
+    }
+
+    #[test]
+    fn keychain_keys_load_from_memory() {
+        for (kind, ecdsa, rsa) in [("ed25519", None, None), ("ecdsa", Some(256), None), ("rsa", None, Some(2048))] {
+            let generated = generate_ssh_key_inner(kind, ecdsa, rsa).expect("generate key");
+            let key = russh::keys::decode_secret_key(&generated.private_key, None).expect("decode key");
+            assert_eq!(
+                key.public_key().to_openssh().unwrap().split_whitespace().take(2).collect::<Vec<_>>(),
+                generated.public_key.split_whitespace().take(2).collect::<Vec<_>>(),
+                "{kind}: decoded key must match the generated public key"
+            );
+        }
+    }
+
+    #[test]
+    fn runnable_files_are_detected() {
+        for path in [
+            "/root/install_ss2022.sh", "/srv/setup.EXE", "/tmp/run.ps1", "/a/b/x.bat",
+            "/a/evil.exe.", "/a/evil.exe . ", "/a/report.pdf.lnk", "/a/Tool.app", "/a/x.py",
+        ] {
+            assert!(is_runnable_file(path), "{path} should be treated as runnable");
+        }
+        for path in ["/root/inbound_address.txt", "/etc/nginx/nginx.conf", "/root/.bashrc", "/root/notes", "/a/sh", "/a/b.json"] {
+            assert!(!is_runnable_file(path), "{path} should open normally");
+        }
+    }
+
+    #[test]
+    fn temp_file_name_keeps_extension_without_trailing_dots() {
+        let path = local_temp_path("host", "/root/evil.exe.").unwrap();
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        assert!(name.ends_with("-evil.exe"), "{name}");
     }
 
     #[test]

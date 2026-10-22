@@ -2725,7 +2725,8 @@ async function openRemote(entry, { openWith = false } = {}) {
     state.watchedFiles = state.watchedFiles.filter((file) => file.remotePath !== watched.remotePath);
     state.watchedFiles.push(watched);
     pushLog("SFTP", `Opened ${entry.path}.`, state.activeHost);
-    setStatus(t("Opened {0}", entry.name));
+    // Scripts and programs are opened as text so they are never run locally.
+    setStatus(watched.openedAsText ? t("{0} can run as a program, so it was opened as text.", entry.name) : t("Opened {0}", entry.name));
   } catch (error) {
     setStatus(t("Open failed: {0}", error));
   }

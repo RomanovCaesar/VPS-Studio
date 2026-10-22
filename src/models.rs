@@ -190,4 +190,7 @@ pub struct WatchedFile {
     pub original_modified_ms: u128,
     pub last_seen_modified_ms: u128,
     pub dirty: bool,
+    /// Opened in a text editor because its type would run as a program.
+    #[serde(default)]
+    pub opened_as_text: bool,
 }
