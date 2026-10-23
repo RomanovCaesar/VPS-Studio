@@ -44,7 +44,7 @@ jobs:
         run: |
           $tag = $env:RAW_TAG
           if (-not $tag -or $tag -eq "main" -or $tag -eq "master") {
-              $tag = "v0.3.3"
+              $tag = "v0.3.4"
           }
           $versionWithV = if ($tag.StartsWith("v")) { $tag } else { "v$tag" }
           $versionNumber = $tag.TrimStart("v")
@@ -157,7 +157,7 @@ jobs:
         run: |
           tag="$RAW_TAG"
           if [ -z "$tag" ] || [ "$tag" = "main" ] || [ "$tag" = "master" ]; then
-              tag="v0.3.3"
+              tag="v0.3.4"
           fi
           if [[ "$tag" != v* ]]; then
               version_with_v="v$tag"
@@ -274,7 +274,7 @@ jobs:
         run: |
           TAG="$RAW_TAG"
           if [ -z "$TAG" ] || [ "$TAG" = "main" ] || [ "$TAG" = "master" ]; then
-            TAG="v0.3.3"
+            TAG="v0.3.4"
           fi
           if [[ "$TAG" != v* ]]; then
             TAG="v$TAG"
