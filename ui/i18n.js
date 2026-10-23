@@ -18,6 +18,7 @@ const i18n = {
     "z-a": "Z-a"
   },
   "zh": {
+    "Drag to resize, double-click to reset": "拖动调整大小，双击恢复默认",
     "The file changed on the server": "服务器上的文件已被修改",
     "{0} was changed on the server after you opened it. Uploading will overwrite those changes.": "{0} 在你打开之后被服务器上的其他人或程序修改过。上传会覆盖这些修改。",
     "Overwrite": "覆盖",
@@ -356,6 +357,7 @@ const i18n = {
     "{0} Hosts": "{0} 台主机"
   },
   "zh-TW": {
+    "Drag to resize, double-click to reset": "拖曳調整大小，按兩下恢復預設",
     "The file changed on the server": "伺服器上的檔案已被修改",
     "{0} was changed on the server after you opened it. Uploading will overwrite those changes.": "{0} 在你開啟之後被伺服器上的其他人或程式修改過。上傳會覆蓋這些修改。",
     "Overwrite": "覆寫",
@@ -694,6 +696,7 @@ const i18n = {
     "{0} Hosts": "{0} 台主機"
   },
   "ja": {
+    "Drag to resize, double-click to reset": "ドラッグでサイズ変更、ダブルクリックで元に戻す",
     "The file changed on the server": "サーバー上のファイルが変更されています",
     "{0} was changed on the server after you opened it. Uploading will overwrite those changes.": "{0} は開いた後にサーバー上で変更されています。アップロードするとその変更は上書きされます。",
     "Overwrite": "上書き",
@@ -1032,6 +1035,7 @@ const i18n = {
     "{0} Hosts": "{0} 台のホスト"
   },
   "ru": {
+    "Drag to resize, double-click to reset": "Перетащите, чтобы изменить размер; двойной щелчок — сброс",
     "The file changed on the server": "Файл на сервере изменился",
     "{0} was changed on the server after you opened it. Uploading will overwrite those changes.": "Файл {0} изменился на сервере после того, как вы его открыли. Загрузка перезапишет эти изменения.",
     "Overwrite": "Перезаписать",
@@ -1370,6 +1374,7 @@ const i18n = {
     "{0} Hosts": "Хосты: {0}"
   },
   "es": {
+    "Drag to resize, double-click to reset": "Arrastra para cambiar el tamaño; doble clic para restablecer",
     "The file changed on the server": "El archivo cambió en el servidor",
     "{0} was changed on the server after you opened it. Uploading will overwrite those changes.": "{0} se modificó en el servidor después de que lo abrieras. Subirlo sobrescribirá esos cambios.",
     "Overwrite": "Sobrescribir",

@@ -249,6 +249,7 @@ function init() {
   // No native browser context menu anywhere; custom menus call preventDefault themselves.
   document.addEventListener("contextmenu", (event) => event.preventDefault());
   bindComboEvents();
+  bindSplitEvents();
   bindSftpEvents();
   bindCommandPanelEvents();
   bindPackageFieldEvents();
@@ -2786,6 +2787,119 @@ function refreshMonitorPanel() {
   }
   monitor.innerHTML = renderMonitor();
   syncComboAfterRender();
+  fitMonitor();
+}
+
+// ---- Resizable session layout (monitor | terminal / bottom panel) ----
+const SESSION_LAYOUT_KEY = "vps-studio.sessionLayout.v1";
+const SESSION_LAYOUT_DEFAULTS = { monitorWidth: 320, bottomHeight: 280 };
+const sessionLayout = loadSessionLayout();
+let monitorResizeObserver = null;
+
+function loadSessionLayout() {
+  try {
+    const saved = JSON.parse(window.localStorage?.getItem(SESSION_LAYOUT_KEY) || "{}");
+    const layout = { ...SESSION_LAYOUT_DEFAULTS };
+    for (const key of Object.keys(layout)) {
+      if (Number.isFinite(saved[key])) layout[key] = saved[key];
+    }
+    return layout;
+  } catch {
+    return { ...SESSION_LAYOUT_DEFAULTS };
+  }
+}
+
+function saveSessionLayout() {
+  try {
+    window.localStorage?.setItem(SESSION_LAYOUT_KEY, JSON.stringify(sessionLayout));
+  } catch {}
+}
+
+// Keep both panes usable whatever the window size.
+function clampSessionLayout(session) {
+  const width = session.clientWidth;
+  const height = session.querySelector(".session-main")?.clientHeight || session.clientHeight;
+  sessionLayout.monitorWidth = Math.round(clamp(sessionLayout.monitorWidth, 220, Math.max(220, Math.min(640, width - 480))));
+  sessionLayout.bottomHeight = Math.round(clamp(sessionLayout.bottomHeight, 140, Math.max(140, height - 180)));
+}
+
+function applySessionLayout(session) {
+  session.style.setProperty("--monitor-width", `${sessionLayout.monitorWidth}px`);
+  session.style.setProperty("--bottom-height", `${sessionLayout.bottomHeight}px`);
+}
+
+function bindSplitEvents() {
+  document.addEventListener("pointerdown", (event) => {
+    const handle = event.target.closest?.("[data-split]");
+    const session = handle?.closest(".session");
+    if (!handle || !session || event.button !== 0) return;
+    event.preventDefault();
+    const kind = handle.dataset.split;
+    const start = { x: event.clientX, y: event.clientY, ...sessionLayout };
+    handle.setPointerCapture(event.pointerId);
+    document.body.classList.add(kind === "monitor" ? "resizing-col" : "resizing-row");
+    handle.classList.add("active");
+    const move = (moveEvent) => {
+      if (kind === "monitor") sessionLayout.monitorWidth = start.monitorWidth + moveEvent.clientX - start.x;
+      else sessionLayout.bottomHeight = start.bottomHeight - (moveEvent.clientY - start.y);
+      clampSessionLayout(session);
+      applySessionLayout(session);
+    };
+    const end = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
+      document.body.classList.remove("resizing-col", "resizing-row");
+      handle.classList.remove("active");
+      saveSessionLayout();
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+  });
+  document.addEventListener("dblclick", (event) => {
+    const handle = event.target.closest?.("[data-split]");
+    const session = handle?.closest(".session");
+    if (!handle || !session) return;
+    const key = handle.dataset.split === "monitor" ? "monitorWidth" : "bottomHeight";
+    sessionLayout[key] = SESSION_LAYOUT_DEFAULTS[key];
+    clampSessionLayout(session);
+    applySessionLayout(session);
+    saveSessionLayout();
+  });
+  window.addEventListener("resize", () => {
+    const session = document.querySelector(".session");
+    if (!session) return;
+    clampSessionLayout(session);
+    applySessionLayout(session);
+  });
+}
+
+// Fit the monitor cards to the panel height instead of scrolling: spare
+// height goes to the network chart, and when the cards do not fit they are
+// scaled down (scrolling only as a last resort in a very small window).
+const MONITOR_MIN_SCALE = 0.6;
+
+function fitMonitor() {
+  const monitor = document.querySelector(".session > .monitor");
+  const content = monitor?.querySelector(".monitor-content");
+  if (!content) return;
+  content.style.zoom = "1";
+  content.style.height = "auto";
+  const available = monitor.clientHeight;
+  const natural = content.offsetHeight;
+  const scale = natural > available ? Math.max(MONITOR_MIN_SCALE, available / natural) : 1;
+  content.style.zoom = String(scale);
+  content.style.height = `${Math.max(natural, Math.floor(available / scale))}px`;
+  monitor.classList.toggle("overflowing", natural * scale > available + 1);
+}
+
+function observeMonitor() {
+  if (monitorResizeObserver) monitorResizeObserver.disconnect();
+  const monitor = document.querySelector(".session > .monitor");
+  if (!monitor) return;
+  monitorResizeObserver = new ResizeObserver(() => fitMonitor());
+  monitorResizeObserver.observe(monitor);
 }
 
 async function refreshSftp(path = state.remotePath) {
@@ -3757,6 +3871,13 @@ function render(options = {}) {
   app.querySelectorAll("input:not([type=checkbox]):not([type=file])").forEach(el => el.setAttribute("autocomplete", "off"));
   bindEvents();
   syncComboAfterRender();
+  const session = app.querySelector(".session");
+  if (session) {
+    clampSessionLayout(session);
+    applySessionLayout(session);
+    observeMonitor();
+    fitMonitor();
+  }
   if (terminalViewActive()) mountXterm(shouldRestoreTerminalFocus);
 
   requestAnimationFrame(() => {
@@ -4578,9 +4699,11 @@ function renderLogRow(row) {
 }
 
 function renderSession() {
+  const layout = sessionLayout;
   return `
-    <section class="session">
+    <section class="session" style="--monitor-width:${layout.monitorWidth}px; --bottom-height:${layout.bottomHeight}px;">
       <aside class="monitor">${renderMonitor()}</aside>
+      <div class="split-handle split-col" data-split="monitor" title="${t("Drag to resize, double-click to reset")}"></div>
       <main class="session-main">
         <section class="terminal-wrap">
           <div id="terminalPane" class="terminal-xterm" tabindex="0"></div>
@@ -4590,6 +4713,7 @@ function renderSession() {
             <button class="btn" data-action="clear-terminal">${t("Clear")}</button>
           </div>
         </section>
+        <div class="split-handle split-row" data-split="bottom" title="${t("Drag to resize, double-click to reset")}"></div>
         <section class="bottom">
           <div class="bottom-tabs">
             <button class="tab ${state.bottomTab === "files" ? "active" : ""}" data-action="bottom-files">${t("Files")}</button>
@@ -4745,6 +4869,7 @@ function renderMonitor() {
   const metrics = state.metrics;
   if (!host) return "";
   return `
+    <div class="monitor-content">
     <div class="metric-card">
       <div class="metric-title">${escapeHtml(host.name)}</div>
       <div class="kv"><span>${t("Host")}</span><strong>${escapeHtml(host.username)}@${escapeHtml(host.host)}</strong></div>
@@ -4768,6 +4893,7 @@ function renderMonitor() {
         .slice(0, 8)
         .map((disk) => `<div class="kv"><span>${escapeHtml(disk.mount)}</span><strong>${humanBytes(disk.used)} / ${humanBytes(disk.total)}</strong></div>`)
         .join("") || `<div class="tiny">${t("Waiting for disk data...")}</div>`}
+    </div>
     </div>
   `;
 }
@@ -6883,7 +7009,7 @@ function humanBytes(bytes) {
     value /= 1024;
     unit += 1;
   }
-  return unit === 0 ? `${value} B` : `${value.toFixed(1)} ${units[unit]}`;
+  return unit === 0 ? `${Math.round(value)} B` : `${value.toFixed(1)} ${units[unit]}`;
 }
 
 function formatDuration(seconds) {

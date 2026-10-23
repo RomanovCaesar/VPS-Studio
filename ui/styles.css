@@ -1061,24 +1061,141 @@ button:disabled {
    ========================================================================== */
 
 .session {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(280px, 320px) 1fr;
+  grid-template-columns: var(--monitor-width, 320px) minmax(0, 1fr);
   height: 100%;
+  min-height: 0;
 }
 
 .monitor {
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
-  padding: 16px;
+  overflow: hidden;
   background: var(--md-sys-color-surface-container-low);
   border-right: 1px solid var(--md-sys-color-outline-variant);
 }
 
+/* Last resort in a very small window: the cards are at their minimum scale. */
+.monitor.overflowing {
+  overflow-y: auto;
+}
+
+/* Cards fill the panel height; the network card takes the spare height. */
+.monitor-content {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+
+.monitor-content > .metric-card {
+  flex: 0 0 auto;
+}
+
+.monitor-content > .metric-card:last-child {
+  margin-bottom: 0;
+}
+
+.monitor-content > .network-chart-card {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.network-chart-card > .net-chart-container {
+  display: flex;
+  flex: 3 0 auto;
+  flex-direction: column;
+}
+
+.network-chart-card > .lat-chart-container {
+  display: flex;
+  flex: 2 0 auto;
+  flex-direction: column;
+}
+
+/* A fixed base height, not the SVG's aspect ratio (which grew with width). */
+.network-chart-card .net-chart-svg {
+  flex: 1 0 60px;
+  height: 0;
+}
+
+.network-chart-card .lat-chart-svg {
+  flex: 1 0 40px;
+  height: 0;
+}
+
 .session-main {
+  position: relative;
   display: grid;
-  grid-template-rows: minmax(280px, 1fr) 280px;
+  grid-template-rows: minmax(0, 1fr) var(--bottom-height, 280px);
   min-width: 0;
   min-height: 0;
+}
+
+/* Drag handles: an invisible 9px hit area centred on the divider line. */
+.split-handle {
+  position: absolute;
+  z-index: 20;
+  touch-action: none;
+}
+
+.split-handle::after {
+  content: "";
+  position: absolute;
+  background: var(--md-sys-color-primary);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.split-handle:hover::after,
+.split-handle.active::after {
+  opacity: 0.8;
+}
+
+.split-col {
+  top: 0;
+  bottom: 0;
+  left: var(--monitor-width, 320px);
+  width: 9px;
+  transform: translateX(-5px);
+  cursor: col-resize;
+}
+
+.split-col::after {
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 3px;
+}
+
+.split-row {
+  left: 0;
+  right: 0;
+  bottom: var(--bottom-height, 280px);
+  height: 9px;
+  transform: translateY(4px);
+  cursor: row-resize;
+}
+
+.split-row::after {
+  left: 0;
+  right: 0;
+  top: 3px;
+  height: 3px;
+}
+
+body.resizing-col,
+body.resizing-col * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.resizing-row,
+body.resizing-row * {
+  cursor: row-resize !important;
+  user-select: none !important;
 }
 
 .local-terminal,
