@@ -18,6 +18,8 @@ const i18n = {
     "z-a": "Z-a"
   },
   "zh": {
+    "Secure storage is unavailable, so passwords and keys are saved unencrypted: {0}": "安全存储不可用，密码和密钥将以未加密方式保存：{0}",
+    "Secure storage is unavailable, so passwords and keys are saved unencrypted.": "安全存储不可用，密码和密钥将以未加密方式保存。",
     "{0} can run as a program, so it was opened as text.": "{0} 是可执行的文件类型，为了安全已用文本编辑器打开。",
     "Connection refused: the host key has changed.": "已拒绝连接：主机密钥已改变。",
     "The host key is not trusted yet.": "该主机的密钥尚未被信任。",
@@ -350,6 +352,8 @@ const i18n = {
     "{0} Hosts": "{0} 台主机"
   },
   "zh-TW": {
+    "Secure storage is unavailable, so passwords and keys are saved unencrypted: {0}": "安全儲存區無法使用，密碼和金鑰將以未加密方式儲存：{0}",
+    "Secure storage is unavailable, so passwords and keys are saved unencrypted.": "安全儲存區無法使用，密碼和金鑰將以未加密方式儲存。",
     "{0} can run as a program, so it was opened as text.": "{0} 是可執行的檔案類型，為了安全已用文字編輯器開啟。",
     "Connection refused: the host key has changed.": "已拒絕連線：主機金鑰已變更。",
     "The host key is not trusted yet.": "此主機的金鑰尚未受信任。",
@@ -682,6 +686,8 @@ const i18n = {
     "{0} Hosts": "{0} 台主機"
   },
   "ja": {
+    "Secure storage is unavailable, so passwords and keys are saved unencrypted: {0}": "安全なストレージを使用できないため、パスワードと鍵は暗号化されずに保存されます：{0}",
+    "Secure storage is unavailable, so passwords and keys are saved unencrypted.": "安全なストレージを使用できないため、パスワードと鍵は暗号化されずに保存されます。",
     "{0} can run as a program, so it was opened as text.": "{0} はプログラムとして実行される種類のファイルのため、安全のためテキストとして開きました。",
     "Connection refused: the host key has changed.": "接続を拒否しました：ホスト鍵が変更されています。",
     "The host key is not trusted yet.": "このホストの鍵はまだ信頼されていません。",
@@ -1014,6 +1020,8 @@ const i18n = {
     "{0} Hosts": "{0} 台のホスト"
   },
   "ru": {
+    "Secure storage is unavailable, so passwords and keys are saved unencrypted: {0}": "Защищённое хранилище недоступно, поэтому пароли и ключи сохраняются без шифрования: {0}",
+    "Secure storage is unavailable, so passwords and keys are saved unencrypted.": "Защищённое хранилище недоступно, поэтому пароли и ключи сохраняются без шифрования.",
     "{0} can run as a program, so it was opened as text.": "{0} может запуститься как программа, поэтому открыт как текст.",
     "Connection refused: the host key has changed.": "Подключение отклонено: ключ хоста изменился.",
     "The host key is not trusted yet.": "Ключ этого хоста ещё не помечен как доверенный.",
@@ -1346,6 +1354,8 @@ const i18n = {
     "{0} Hosts": "Хосты: {0}"
   },
   "es": {
+    "Secure storage is unavailable, so passwords and keys are saved unencrypted: {0}": "El almacenamiento seguro no está disponible, así que las contraseñas y claves se guardan sin cifrar: {0}",
+    "Secure storage is unavailable, so passwords and keys are saved unencrypted.": "El almacenamiento seguro no está disponible, así que las contraseñas y claves se guardan sin cifrar.",
     "{0} can run as a program, so it was opened as text.": "{0} puede ejecutarse como un programa, así que se abrió como texto.",
     "Connection refused: the host key has changed.": "Conexión rechazada: la clave del host ha cambiado.",
     "The host key is not trusted yet.": "La clave de este host aún no es de confianza.",

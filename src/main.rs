@@ -3,6 +3,7 @@
 mod backend;
 mod config;
 mod models;
+mod vault;
 
 use backend::{
     check_watched_files, chmod_remote, collect_metrics, create_remote_folder, delete_remote, generate_ssh_key,
@@ -10,7 +11,7 @@ use backend::{
     start_local_shell, start_shell, stop_shell, test_connection, upload_edited_file,
     write_clipboard_text, write_shell, ShellStore,
 };
-use config::{load_hosts, save_hosts, load_known_hosts, save_known_hosts, import_known_hosts, add_known_host};
+use config::{load_hosts, save_hosts, vault_status, load_known_hosts, save_known_hosts, import_known_hosts, add_known_host};
 
 fn main() {
     tauri::Builder::default()
@@ -41,7 +42,10 @@ fn main() {
             write_clipboard_text,
             rename_remote,
             chmod_remote,
-            resize_shell
+            resize_shell,
+            vault_status,
+            vault::vault_get,
+            vault::vault_set
         ])
         .run(tauri::generate_context!())
         .expect("error while running VPS Studio");

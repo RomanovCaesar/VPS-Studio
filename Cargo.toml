@@ -24,6 +24,8 @@ ssh-key = { version = "0.7.0-rc.11", features = ["crypto"] }
 tauri = { version = "2.11.3", features = [] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "io-util", "fs", "sync"] }
 portable-pty = "0.9"
+keyring = { version = "3.6.3", default-features = false, features = ["windows-native", "apple-native"] }
+ring = "0.17"
 
 [profile.release]
 strip = true

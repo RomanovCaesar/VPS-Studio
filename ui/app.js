@@ -268,9 +268,17 @@ function init() {
 }
 
 async function loadInitialHosts() {
-  state.groupProfiles = loadGroupProfiles();
-  state.keys = loadKeychain();
-  state.identities = loadIdentities();
+  if (invoke) {
+    try {
+      await call("vault_status");
+    } catch (error) {
+      vaultAvailable = false;
+      pushLog("App", `Secure storage unavailable: ${error}`);
+    }
+  }
+  state.groupProfiles = loadGroupProfiles(await secureLoad("groupProfiles", GROUP_PROFILES_KEY));
+  state.keys = loadKeychain(await secureLoad("keychain", KEYCHAIN_KEY));
+  state.identities = loadIdentities(await secureLoad("identities", IDENTITIES_KEY));
   state.snippets = loadSnippets();
   state.snippetPackages = loadSnippetPackages();
   migrateSnippetPackages();
@@ -291,7 +299,9 @@ async function loadInitialHosts() {
     state.status = t("Ready");
     if (!state.hosts.length) state.hosts = [emptyHost()];
     state.selectedHostId = state.hosts[0]?.id ?? null;
-    state.status = t("Ready");
+    state.status = vaultAvailable || !invoke
+      ? t("Ready")
+      : t("Secure storage is unavailable, so passwords and keys are saved unencrypted.");
     pushLog("App", `Loaded ${state.hosts.length} host profile(s).`);
   } catch (error) {
     state.hosts = [emptyHost()];
@@ -339,9 +349,8 @@ function keyIsBlank(key) {
   return !String(key?.label || "").trim() && !String(key?.privateKey || "").trim() && !String(key?.publicKey || "").trim();
 }
 
-function loadKeychain() {
+function loadKeychain(raw) {
   try {
-    const raw = window.localStorage?.getItem(KEYCHAIN_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.map(normalizeKey).filter((key) => !keyIsBlank(key)) : [];
@@ -351,16 +360,11 @@ function loadKeychain() {
 }
 
 function persistKeychain() {
-  try {
-    window.localStorage?.setItem(KEYCHAIN_KEY, JSON.stringify(state.keys));
-  } catch (error) {
-    pushLog("Keychain", `Save keychain failed: ${error}`);
-  }
+  secureSave("keychain", KEYCHAIN_KEY, JSON.stringify(state.keys));
 }
 
-function loadIdentities() {
+function loadIdentities(raw) {
   try {
-    const raw = window.localStorage?.getItem(IDENTITIES_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -370,11 +374,80 @@ function loadIdentities() {
 }
 
 function persistIdentities() {
+  secureSave("identities", IDENTITIES_KEY, JSON.stringify(state.identities));
+}
+
+/* --------------------------------------------------------------------------
+   Secrets (Keychain keys, identities, group credentials) are kept in the
+   backend's encrypted vault, whose key lives in the OS credential store.
+   Plaintext copies left in localStorage by older versions are moved there
+   and then deleted. If the vault is unavailable, localStorage is used as
+   before so nothing is lost, and the user is warned.
+   -------------------------------------------------------------------------- */
+let vaultAvailable = Boolean(invoke);
+let vaultQueue = Promise.resolve();
+
+function readLegacy(legacyKey) {
   try {
-    window.localStorage?.setItem(IDENTITIES_KEY, JSON.stringify(state.identities));
-  } catch (error) {
-    pushLog("Keychain", `Save identities failed: ${error}`);
+    return window.localStorage?.getItem(legacyKey) ?? null;
+  } catch {
+    return null;
   }
+}
+
+function removeLegacy(legacyKey) {
+  try {
+    window.localStorage?.removeItem(legacyKey);
+  } catch {
+    // nothing to clean up
+  }
+}
+
+async function secureLoad(name, legacyKey) {
+  if (!vaultAvailable) return readLegacy(legacyKey);
+  try {
+    const stored = await call("vault_get", { name });
+    const legacy = readLegacy(legacyKey);
+    if (stored != null) {
+      if (legacy != null) removeLegacy(legacyKey);
+      return stored;
+    }
+    if (legacy != null) {
+      // Migrate: write to the vault first, delete the plaintext copy only after.
+      await call("vault_set", { name, value: legacy });
+      removeLegacy(legacyKey);
+    }
+    return legacy;
+  } catch (error) {
+    vaultAvailable = false;
+    pushLog("App", `Secure storage unavailable: ${error}`);
+    return readLegacy(legacyKey);
+  }
+}
+
+// Saves are queued so an older value can never overwrite a newer one.
+function secureSave(name, legacyKey, value) {
+  if (!vaultAvailable) {
+    try {
+      window.localStorage?.setItem(legacyKey, value);
+    } catch (error) {
+      pushLog("App", `Save ${name} failed: ${error}`);
+    }
+    return;
+  }
+  vaultQueue = vaultQueue
+    .then(() => call("vault_set", { name, value }))
+    .then(() => removeLegacy(legacyKey))
+    .catch((error) => {
+      // Keep the data rather than lose it, and tell the user.
+      vaultAvailable = false;
+      try {
+        window.localStorage?.setItem(legacyKey, value);
+      } catch {
+        // nothing more we can do
+      }
+      setStatus(t("Secure storage is unavailable, so passwords and keys are saved unencrypted: {0}", error));
+    });
 }
 
 function rawValue(id) {
@@ -766,9 +839,8 @@ function bindComboEvents() {
   );
 }
 
-function loadGroupProfiles() {
+function loadGroupProfiles(raw) {
   try {
-    const raw = window.localStorage?.getItem(GROUP_PROFILES_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     return Object.fromEntries(
@@ -785,11 +857,7 @@ function loadGroupProfiles() {
 }
 
 function persistGroupProfiles() {
-  try {
-    window.localStorage?.setItem(GROUP_PROFILES_KEY, JSON.stringify(state.groupProfiles));
-  } catch (error) {
-    pushLog("App", `Save group profiles failed: ${error}`);
-  }
+  secureSave("groupProfiles", GROUP_PROFILES_KEY, JSON.stringify(state.groupProfiles));
 }
 
 function loadLogs() {
