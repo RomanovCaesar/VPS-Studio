@@ -194,8 +194,94 @@ enum ActiveShellKind {
 }
 
 struct RemoteShell {
-    session: client::Handle<Client>,
+    session: SharedSession,
     writer: ChannelWriteHalf<client::Msg>,
+}
+
+/* --------------------------------------------------------------------------
+   One authenticated SSH connection per host, shared by the interactive shell,
+   SFTP, the system monitor and commands. Each of those opens its own channel
+   on it (one round trip) instead of a new TCP connection and login: before,
+   the monitor alone logged in every 5 seconds, which floods the auth log and
+   can get the user's IP banned by fail2ban.
+   -------------------------------------------------------------------------- */
+type SharedSession = Arc<client::Handle<Client>>;
+type ConnectionSlot = Arc<TokioMutex<Option<SharedSession>>>;
+
+static CONNECTIONS: std::sync::LazyLock<StdMutex<HashMap<String, ConnectionSlot>>> =
+    std::sync::LazyLock::new(|| StdMutex::new(HashMap::new()));
+
+/// Same host entry, address and credentials share a connection; editing any
+/// of them makes a new one.
+fn connection_key(profile: &HostProfile) -> String {
+    let auth = serde_json::to_string(&profile.auth).unwrap_or_default();
+    format!(
+        "{}|{}|{}|{}|{:x}",
+        profile.id,
+        profile.host.trim().to_ascii_lowercase(),
+        profile.port,
+        profile.username,
+        stable_hash(&auth)
+    )
+}
+
+fn connection_slot(profile: &HostProfile) -> ConnectionSlot {
+    let mut connections = CONNECTIONS.lock().unwrap_or_else(|poison| poison.into_inner());
+    Arc::clone(connections.entry(connection_key(profile)).or_default())
+}
+
+/// The host's live connection, or a new one that is kept for reuse.
+async fn shared_session(profile: &HostProfile) -> Result<SharedSession> {
+    let slot = connection_slot(profile);
+    let mut current = slot.lock().await;
+    if let Some(session) = current.as_ref().filter(|session| !session.is_closed()) {
+        return Ok(Arc::clone(session));
+    }
+    let session = Arc::new(connect_authenticated(profile).await?);
+    *current = Some(Arc::clone(&session));
+    Ok(session)
+}
+
+/// Make the interactive shell's connection the shared one for its host.
+async fn adopt_shared_session(profile: &HostProfile, session: &SharedSession) {
+    let slot = connection_slot(profile);
+    let previous = slot.lock().await.replace(Arc::clone(session));
+    if let Some(previous) = previous.filter(|previous| !Arc::ptr_eq(previous, session)) {
+        let _ = previous.disconnect(Disconnect::ByApplication, "", "English").await;
+    }
+}
+
+/// Close and forget every shared connection of a host entry (on disconnect).
+async fn close_shared_sessions(profile_id: &str) {
+    let prefix = format!("{profile_id}|");
+    let slots: Vec<ConnectionSlot> = {
+        let mut connections = CONNECTIONS.lock().unwrap_or_else(|poison| poison.into_inner());
+        let keys: Vec<String> = connections.keys().filter(|key| key.starts_with(&prefix)).cloned().collect();
+        keys.iter().filter_map(|key| connections.remove(key)).collect()
+    };
+    for slot in slots {
+        if let Some(session) = slot.lock().await.take() {
+            let _ = session.disconnect(Disconnect::ByApplication, "", "English").await;
+        }
+    }
+}
+
+/// Open a channel on the host's shared connection, reconnecting once if the
+/// connection has died. Also returns how long opening took: one network
+/// round trip, used as the latency shown in the monitor.
+async fn open_shared_channel(profile: &HostProfile) -> Result<(russh::Channel<client::Msg>, Duration)> {
+    for attempt in 0..2 {
+        let session = shared_session(profile).await?;
+        let started = Instant::now();
+        match session.channel_open_session().await {
+            Ok(channel) => return Ok((channel, started.elapsed())),
+            Err(err) if attempt == 0 && session.is_closed() => {
+                let _ = err; // the connection dropped; the next attempt reconnects
+            }
+            Err(err) => return Err(err).context("open SSH channel"),
+        }
+    }
+    unreachable!("the second attempt always returns")
 }
 
 /// Local shell running inside a real pseudo-terminal (ConPTY on Windows,
@@ -383,6 +469,8 @@ pub async fn start_shell(
             }
         });
 
+        let session: SharedSession = Arc::new(session);
+        adopt_shared_session(&profile, &session).await;
         store.sessions.lock().await.insert(
             session_id,
             ActiveShell {
@@ -523,29 +611,11 @@ static PREV_CPU_TICKS: std::sync::LazyLock<StdMutex<HashMap<String, (u64, u64, I
 #[tauri::command]
 pub async fn collect_metrics(profile: HostProfile) -> Result<SystemSnapshot, String> {
     async move {
-        // Concurrently measure real TCP connect latency (tcping) to the server's SSH port
-        let host = profile.host.clone();
-        let port = profile.port;
-        let tcp_ping_task = tokio::task::spawn_blocking(move || {
-            use std::net::{TcpStream, ToSocketAddrs};
-            let addr_str = if host.contains(':') && !host.starts_with('[') {
-                format!("[{}]:{}", host, port)
-            } else {
-                format!("{}:{}", host, port)
-            };
-            if let Ok(mut addrs) = addr_str.to_socket_addrs() {
-                if let Some(addr) = addrs.next() {
-                    let connect_start = Instant::now();
-                    if TcpStream::connect_timeout(&addr, Duration::from_millis(2000)).is_ok() {
-                        return Some(connect_start.elapsed().as_millis());
-                    }
-                }
-            }
-            None
-        });
-
+        // Latency is the SSH channel-open round trip on the shared connection.
+        // (The old separate TCP probe left an aborted pre-auth connection in
+        // the server's log every 5 seconds.)
         let command = format!("sh -c {}", shell_single_quote(METRICS_SCRIPT));
-        let output = exec_once(&profile, &command).await?;
+        let (output, round_trip) = exec_timed(&profile, &command).await?;
         let (mut snapshot, raw_ticks) = parse_metrics(&output.stdout);
 
         // If CPU tick counters are available, compute accurate CPU usage over the polling interval
@@ -566,8 +636,7 @@ pub async fn collect_metrics(profile: HostProfile) -> Result<SystemSnapshot, Str
             prev_map.insert(profile.id.clone(), (idle_ticks, total_ticks, now));
         }
 
-        let tcp_latency = tcp_ping_task.await.ok().flatten();
-        snapshot.latency_ms = tcp_latency;
+        snapshot.latency_ms = Some(round_trip.as_millis());
         snapshot.collected_at = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         Ok(snapshot)
     }
@@ -1004,6 +1073,8 @@ fn push_shell_output(output: &Arc<StdMutex<String>>, text: &str) {
 }
 
 async fn stop_shell_inner(store: &ShellStore, session_id: &str) -> Result<()> {
+    // Remote session ids are host profile ids.
+    close_shared_sessions(session_id).await;
     let shell = store.sessions.lock().await.remove(session_id);
     if let Some(shell) = shell {
         match shell.kind {
@@ -1185,7 +1256,9 @@ fn take_utf8_prefix(pending: &mut Vec<u8>) -> String {
 /// accepted earlier in this run. They never prompt.
 async fn connect_authenticated(profile: &HostProfile) -> Result<client::Handle<Client>> {
     let host_key_problem = Arc::new(tokio::sync::Mutex::new(None));
-    match connect_authenticated_with_timeout(profile, Some(Duration::from_secs(30)), None, Arc::clone(&host_key_problem)).await {
+    // Shared and long-lived: keepalives (not an inactivity timeout) decide
+    // when the connection is dead.
+    match connect_authenticated_with_timeout(profile, None, None, Arc::clone(&host_key_problem)).await {
         Ok(session) => Ok(session),
         Err(err) => match host_key_problem.lock().await.take() {
             Some(problem) => Err(anyhow::anyhow!(problem.to_error())),
@@ -1320,12 +1393,10 @@ async fn connect_authenticated_with_timeout(
     Ok(session)
 }
 
+/// An SFTP session on its own channel of the host's shared connection. It is
+/// closed when dropped (the channel is closed with it).
 async fn connect_sftp(profile: &HostProfile) -> Result<SftpSession> {
-    let session = connect_authenticated(profile).await?;
-    let channel = session
-        .channel_open_session()
-        .await
-        .context("open sftp channel")?;
+    let (channel, _) = open_shared_channel(profile).await?;
     channel
         .request_subsystem(true, "sftp")
         .await
@@ -1336,19 +1407,21 @@ async fn connect_sftp(profile: &HostProfile) -> Result<SftpSession> {
 }
 
 async fn exec_once(profile: &HostProfile, command: &str) -> Result<CommandOutput> {
+    exec_timed(profile, command).await.map(|(output, _)| output)
+}
+
+/// Run a command on its own channel of the shared connection. Returns the
+/// output and the channel-open round trip time.
+async fn exec_timed(profile: &HostProfile, command: &str) -> Result<(CommandOutput, Duration)> {
     if command.trim().is_empty() {
         bail!("command is empty");
     }
 
-    let session = connect_authenticated(profile).await?;
-    let mut channel = session
-        .channel_open_session()
-        .await
-        .context("open command channel")?;
-    channel
-        .exec(true, command)
-        .await
-        .with_context(|| format!("execute remote command: {command}"))?;
+    let (mut channel, round_trip) = open_shared_channel(profile).await?;
+    if let Err(err) = channel.exec(true, command).await {
+        let _ = channel.close().await;
+        return Err(err).with_context(|| format!("execute remote command: {command}"));
+    }
 
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
@@ -1364,16 +1437,15 @@ async fn exec_once(profile: &HostProfile, command: &str) -> Result<CommandOutput
         }
     }
 
-    let _ = session
-        .disconnect(Disconnect::ByApplication, "", "English")
-        .await;
-
-    Ok(CommandOutput {
-        command: command.to_owned(),
-        stdout: String::from_utf8_lossy(&stdout).to_string(),
-        stderr: String::from_utf8_lossy(&stderr).to_string(),
-        exit_status,
-    })
+    Ok((
+        CommandOutput {
+            command: command.to_owned(),
+            stdout: String::from_utf8_lossy(&stdout).to_string(),
+            stderr: String::from_utf8_lossy(&stderr).to_string(),
+            exit_status,
+        },
+        round_trip,
+    ))
 }
 
 fn validate_profile(profile: &HostProfile) -> Result<()> {
@@ -1719,6 +1791,159 @@ PROC|10240|1,5|bash
             verify_host_key(&[], Some("SHA256:a"), "h", 22, "SHA256:b"),
             HostKeyVerdict::Changed(vec!["SHA256:a".into()])
         );
+    }
+
+    /// In-process SSH server that counts connections, logins and channels.
+    mod test_server {
+        use russh::server::{self, Auth, Msg, Session};
+        use russh::{Channel, ChannelId};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        #[derive(Default)]
+        pub struct Counters {
+            pub connections: AtomicUsize,
+            pub logins: AtomicUsize,
+            pub channels_opened: AtomicUsize,
+            /// Closed by the client (counted in channel_close).
+            pub channels_closed: AtomicUsize,
+            /// Closed by the server itself after an exec.
+            pub channels_closed_by_server: AtomicUsize,
+        }
+
+        impl Counters {
+            /// (connections, logins, channels opened, channels closed by either side)
+            pub fn get(&self) -> (usize, usize, usize, usize) {
+                (
+                    self.connections.load(Ordering::SeqCst),
+                    self.logins.load(Ordering::SeqCst),
+                    self.channels_opened.load(Ordering::SeqCst),
+                    self.channels_closed.load(Ordering::SeqCst) + self.channels_closed_by_server.load(Ordering::SeqCst),
+                )
+            }
+        }
+
+        #[derive(Clone)]
+        pub struct TestServer(pub Arc<Counters>);
+
+        impl server::Server for TestServer {
+            type Handler = Self;
+            fn new_client(&mut self, _: Option<std::net::SocketAddr>) -> Self {
+                self.0.connections.fetch_add(1, Ordering::SeqCst);
+                self.clone()
+            }
+        }
+
+        impl server::Handler for TestServer {
+            type Error = russh::Error;
+
+            async fn auth_password(&mut self, _: &str, _: &str) -> Result<Auth, Self::Error> {
+                self.0.logins.fetch_add(1, Ordering::SeqCst);
+                Ok(Auth::Accept)
+            }
+
+            async fn channel_open_session(
+                &mut self,
+                _: Channel<Msg>,
+                reply: server::ChannelOpenHandle,
+                _: &mut Session,
+            ) -> Result<(), Self::Error> {
+                self.0.channels_opened.fetch_add(1, Ordering::SeqCst);
+                reply.accept().await;
+                Ok(())
+            }
+
+            async fn exec_request(&mut self, channel: ChannelId, _: &[u8], session: &mut Session) -> Result<(), Self::Error> {
+                session.channel_success(channel)?;
+                session.data(channel, b"OS|TestOS\n".to_vec())?;
+                session.exit_status_request(channel, 0)?;
+                session.eof(channel)?;
+                session.close(channel)?;
+                self.0.channels_closed_by_server.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }
+
+            async fn channel_close(&mut self, _: ChannelId, _: &mut Session) -> Result<(), Self::Error> {
+                self.0.channels_closed.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }
+        }
+    }
+
+    #[test]
+    fn background_work_shares_one_connection() {
+        use russh::server::Server as _;
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let counters = Arc::new(test_server::Counters::default());
+            let generated = generate_ssh_key_inner("ed25519", None, None).unwrap();
+            let key = russh::keys::decode_secret_key(&generated.private_key, None).unwrap();
+            let fingerprint = key.public_key().fingerprint(ssh_key::HashAlg::Sha256).to_string();
+            let config = Arc::new(russh::server::Config { keys: vec![key], ..Default::default() });
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let mut server = test_server::TestServer(Arc::clone(&counters));
+            tokio::spawn(async move {
+                let _ = server.run_on_socket(config, &listener).await;
+            });
+            // As if the user had clicked "Continue" for this host key.
+            SESSION_TRUSTED_KEYS.lock().unwrap().insert(host_key_id("127.0.0.1", port), fingerprint);
+
+            let mut profile = HostProfile::empty();
+            profile.id = "pool-test".into();
+            profile.host = "127.0.0.1".into();
+            profile.port = port;
+            profile.username = "root".into();
+            profile.auth = AuthMethod::Password { password: "first".into() };
+            let settle = || tokio::time::sleep(Duration::from_millis(150));
+
+            // 1. Commands and a monitor refresh share one connection and one login.
+            for _ in 0..3 {
+                let (output, round_trip) = exec_timed(&profile, "uptime").await.unwrap();
+                assert_eq!(output.exit_status, Some(0));
+                assert!(output.stdout.contains("TestOS"));
+                assert!(round_trip < Duration::from_secs(2));
+            }
+            let snapshot = collect_metrics(profile.clone()).await.unwrap();
+            assert_eq!(snapshot.os, "TestOS");
+            assert!(snapshot.latency_ms.is_some(), "latency comes from the SSH round trip");
+            settle().await;
+            let (connections, logins, opened, closed) = counters.get();
+            assert_eq!((connections, logins, opened), (1, 1, 4), "one connection, one login, four channels");
+            assert_eq!(closed, opened, "every channel is closed again");
+
+            // Channels the client holds are closed too: explicitly, and when a
+            // stream is dropped (how every SFTP operation ends).
+            let (explicit, _) = open_shared_channel(&profile).await.unwrap();
+            explicit.close().await.unwrap();
+            let (stream_channel, _) = open_shared_channel(&profile).await.unwrap();
+            drop(stream_channel.into_stream());
+            settle().await;
+            let (connections, _, opened, closed) = counters.get();
+            assert_eq!(connections, 1);
+            assert_eq!(closed, opened, "client-side channels are closed too");
+            assert_eq!(counters.channels_closed.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+            // 2. Changed credentials get their own connection.
+            profile.auth = AuthMethod::Password { password: "second".into() };
+            exec_timed(&profile, "uptime").await.unwrap();
+            assert_eq!(counters.get().0, 2);
+
+            // 3. A connection that died is replaced automatically.
+            let dead = shared_session(&profile).await.unwrap();
+            dead.disconnect(Disconnect::ByApplication, "", "English").await.unwrap();
+            settle().await;
+            assert!(dead.is_closed());
+            exec_timed(&profile, "uptime").await.unwrap();
+            assert_eq!(counters.get().0, 3, "reconnected once");
+
+            // 4. Disconnecting closes the shared connections of that host.
+            let live = shared_session(&profile).await.unwrap();
+            close_shared_sessions(&profile.id).await;
+            settle().await;
+            assert!(live.is_closed());
+            assert!(CONNECTIONS.lock().unwrap().keys().all(|key| !key.starts_with("pool-test|")));
+        });
     }
 
     #[test]
