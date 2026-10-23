@@ -1,6 +1,6 @@
 use crate::models::{
     AuthMethod, CommandOutput, ConnectionSummary, DiskInfo, HostProfile, NetDevice, ProcessInfo,
-    RemoteEntry, SftpDir, SystemSnapshot, WatchedFile,
+    RemoteEntry, RemoteStamp, SftpDir, SystemSnapshot, WatchedFile,
 };
 use anyhow::{bail, Context, Result};
 use chrono::Local;
@@ -728,6 +728,7 @@ pub async fn open_remote_file(
             .read(remote_path.clone())
             .await
             .with_context(|| format!("download {remote_path}"))?;
+        let stamp = remote_stamp(&sftp, &remote_path).await;
         let local_path = local_temp_path(&profile.name, &remote_path)?;
         if let Some(parent) = local_path.parent() {
             tokio::fs::create_dir_all(parent)
@@ -758,6 +759,8 @@ pub async fn open_remote_file(
             last_seen_modified_ms: modified,
             dirty: false,
             opened_as_text,
+            remote_mtime: stamp.as_ref().and_then(|s| s.mtime),
+            remote_size: stamp.as_ref().and_then(|s| s.size),
         })
     }
     .await
@@ -769,12 +772,26 @@ pub async fn upload_edited_file(
     profile: HostProfile,
     remote_path: String,
     local_path: String,
-) -> Result<(), String> {
+    expected_mtime: Option<u32>,
+    expected_size: Option<u64>,
+    force: Option<bool>,
+) -> Result<RemoteStamp, String> {
     async move {
         let bytes = tokio::fs::read(&local_path)
             .await
             .with_context(|| format!("read {local_path}"))?;
         let sftp = connect_sftp(&profile).await?;
+        // Refuse to overwrite changes made on the server since the file was
+        // opened, unless the user confirmed ("force").
+        if !force.unwrap_or(false) && (expected_mtime.is_some() || expected_size.is_some()) {
+            let current = remote_stamp(&sftp, &remote_path).await;
+            let unchanged = current
+                .as_ref()
+                .is_some_and(|now| now.mtime == expected_mtime && now.size == expected_size);
+            if !unchanged {
+                bail!("REMOTE_CHANGED");
+            }
+        }
         let mut file = sftp
             .create(remote_path.clone())
             .await
@@ -783,7 +800,11 @@ pub async fn upload_edited_file(
             .await
             .with_context(|| format!("upload {remote_path}"))?;
         file.shutdown().await.ok();
-        Ok(())
+        drop(file);
+        // The new remote state, so the next upload compares against it.
+        Ok(remote_stamp(&sftp, &remote_path)
+            .await
+            .unwrap_or(RemoteStamp { mtime: None, size: None }))
     }
     .await
     .map_err(|err: anyhow::Error| format!("{err:#}"))
@@ -831,6 +852,14 @@ pub async fn chmod_remote(profile: HostProfile, remote_path: String, mode: u32) 
     }
     .await
     .map_err(|err: anyhow::Error| format!("{err:#}"))
+}
+
+/// Modification time and size of a remote file, or None if it is gone.
+async fn remote_stamp(sftp: &SftpSession, remote_path: &str) -> Option<RemoteStamp> {
+    sftp.metadata(remote_path.to_owned())
+        .await
+        .ok()
+        .map(|meta| RemoteStamp { mtime: meta.mtime, size: meta.size })
 }
 
 /// Delete a remote folder and everything inside it. Symlinks are unlinked,
@@ -1562,6 +1591,43 @@ fn join_remote_path(base: &str, name: &str) -> String {
     }
 }
 
+/// Downloaded copies older than this are deleted at startup. Edits can only be
+/// uploaded while the app that opened the file is running, so nobody can still
+/// be working on them.
+const TEMP_FILE_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Remove leftovers in the app's temp folder: downloaded remote files (which
+/// may contain secrets such as configs) and the `keychain` folder where
+/// versions before 0.3.4 briefly wrote private keys during login.
+pub fn cleanup_temp_files() {
+    cleanup_temp_dir(&std::env::temp_dir().join("vps-studio"), TEMP_FILE_MAX_AGE);
+}
+
+fn cleanup_temp_dir(root: &Path, max_age: Duration) {
+    let _ = std::fs::remove_dir_all(root.join("keychain"));
+    let Ok(hosts) = std::fs::read_dir(root) else {
+        return;
+    };
+    let cutoff = SystemTime::now().checked_sub(max_age).unwrap_or(UNIX_EPOCH);
+    for host_dir in hosts.flatten() {
+        let Ok(files) = std::fs::read_dir(host_dir.path()) else {
+            continue;
+        };
+        for file in files.flatten() {
+            let old = file
+                .metadata()
+                .and_then(|meta| meta.modified())
+                .map(|modified| modified < cutoff)
+                .unwrap_or(false);
+            if old {
+                let _ = std::fs::remove_file(file.path());
+            }
+        }
+        // Only succeeds when the folder is now empty.
+        let _ = std::fs::remove_dir(host_dir.path());
+    }
+}
+
 fn local_temp_path(host_name: &str, remote_path: &str) -> Result<PathBuf> {
     let file_name = remote_path
         .rsplit('/')
@@ -1823,8 +1889,11 @@ PROC|10240|1,5|bash
             }
         }
 
+        /// In-memory files: path -> (content, mtime).
+        pub type Files = Arc<std::sync::Mutex<std::collections::HashMap<String, (Vec<u8>, u32)>>>;
+
         #[derive(Clone)]
-        pub struct TestServer(pub Arc<Counters>);
+        pub struct TestServer(pub Arc<Counters>, pub Files, pub Arc<tokio::sync::Mutex<std::collections::HashMap<ChannelId, Channel<Msg>>>>);
 
         impl server::Server for TestServer {
             type Handler = Self;
@@ -1844,12 +1913,33 @@ PROC|10240|1,5|bash
 
             async fn channel_open_session(
                 &mut self,
-                _: Channel<Msg>,
+                channel: Channel<Msg>,
                 reply: server::ChannelOpenHandle,
                 _: &mut Session,
             ) -> Result<(), Self::Error> {
                 self.0.channels_opened.fetch_add(1, Ordering::SeqCst);
+                self.2.lock().await.insert(channel.id(), channel);
                 reply.accept().await;
+                Ok(())
+            }
+
+            async fn subsystem_request(&mut self, channel: ChannelId, name: &str, session: &mut Session) -> Result<(), Self::Error> {
+                let stored = self.2.lock().await.remove(&channel);
+                match (name, stored) {
+                    ("sftp", Some(stored)) => {
+                        session.channel_success(channel)?;
+                        let files = Arc::clone(&self.1);
+                        tokio::spawn(russh_sftp::server::run(stored.into_stream(), MemorySftp(files)));
+                    }
+                    _ => session.channel_failure(channel)?,
+                }
+                Ok(())
+            }
+
+            async fn channel_eof(&mut self, channel: ChannelId, session: &mut Session) -> Result<(), Self::Error> {
+                // The client finished (e.g. an SFTP session ended): close the channel.
+                session.close(channel)?;
+                self.0.channels_closed_by_server.fetch_add(1, Ordering::SeqCst);
                 Ok(())
             }
 
@@ -1868,33 +1958,197 @@ PROC|10240|1,5|bash
                 Ok(())
             }
         }
+
+        /// SFTP server backed by `Files`: enough for open/read/write/close/stat.
+        pub struct MemorySftp(pub Files);
+
+        impl russh_sftp::server::Handler for MemorySftp {
+            type Error = russh_sftp::protocol::StatusCode;
+
+            fn unimplemented(&self) -> Self::Error {
+                russh_sftp::protocol::StatusCode::OpUnsupported
+            }
+
+            async fn init(
+                &mut self,
+                _: u32,
+                _: std::collections::HashMap<String, String>,
+            ) -> Result<russh_sftp::protocol::Version, Self::Error> {
+                Ok(russh_sftp::protocol::Version::new())
+            }
+
+            async fn open(
+                &mut self,
+                id: u32,
+                filename: String,
+                pflags: russh_sftp::protocol::OpenFlags,
+                _: russh_sftp::protocol::FileAttributes,
+            ) -> Result<russh_sftp::protocol::Handle, Self::Error> {
+                use russh_sftp::protocol::{OpenFlags, StatusCode};
+                let mut files = self.0.lock().unwrap();
+                if pflags.contains(OpenFlags::TRUNCATE) || (pflags.contains(OpenFlags::CREATE) && !files.contains_key(&filename)) {
+                    let mtime = files.values().map(|f| f.1).max().unwrap_or(0) + 1;
+                    files.insert(filename.clone(), (Vec::new(), mtime));
+                } else if !files.contains_key(&filename) {
+                    return Err(StatusCode::NoSuchFile);
+                }
+                Ok(russh_sftp::protocol::Handle { id, handle: filename })
+            }
+
+            async fn close(&mut self, id: u32, _: String) -> Result<russh_sftp::protocol::Status, Self::Error> {
+                Ok(ok_status(id))
+            }
+
+            async fn read(&mut self, id: u32, handle: String, offset: u64, len: u32) -> Result<russh_sftp::protocol::Data, Self::Error> {
+                let files = self.0.lock().unwrap();
+                let content = &files.get(&handle).ok_or(russh_sftp::protocol::StatusCode::NoSuchFile)?.0;
+                let start = offset as usize;
+                if start >= content.len() {
+                    return Err(russh_sftp::protocol::StatusCode::Eof);
+                }
+                let end = (start + len as usize).min(content.len());
+                Ok(russh_sftp::protocol::Data { id, data: content[start..end].to_vec() })
+            }
+
+            async fn write(&mut self, id: u32, handle: String, offset: u64, data: Vec<u8>) -> Result<russh_sftp::protocol::Status, Self::Error> {
+                let mut files = self.0.lock().unwrap();
+                let next_mtime = files.values().map(|f| f.1).max().unwrap_or(0) + 1;
+                let file = files.get_mut(&handle).ok_or(russh_sftp::protocol::StatusCode::NoSuchFile)?;
+                let start = offset as usize;
+                if file.0.len() < start + data.len() {
+                    file.0.resize(start + data.len(), 0);
+                }
+                file.0[start..start + data.len()].copy_from_slice(&data);
+                file.1 = next_mtime;
+                Ok(ok_status(id))
+            }
+
+            async fn stat(&mut self, id: u32, path: String) -> Result<russh_sftp::protocol::Attrs, Self::Error> {
+                self.attrs(id, &path)
+            }
+
+            async fn lstat(&mut self, id: u32, path: String) -> Result<russh_sftp::protocol::Attrs, Self::Error> {
+                self.attrs(id, &path)
+            }
+
+            async fn fstat(&mut self, id: u32, handle: String) -> Result<russh_sftp::protocol::Attrs, Self::Error> {
+                self.attrs(id, &handle)
+            }
+        }
+
+        impl MemorySftp {
+            fn attrs(&self, id: u32, path: &str) -> Result<russh_sftp::protocol::Attrs, russh_sftp::protocol::StatusCode> {
+                let files = self.0.lock().unwrap();
+                let (content, mtime) = files.get(path).ok_or(russh_sftp::protocol::StatusCode::NoSuchFile)?;
+                let mut attrs = russh_sftp::protocol::FileAttributes::empty();
+                attrs.size = Some(content.len() as u64);
+                attrs.mtime = Some(*mtime);
+                attrs.permissions = Some(0o100644);
+                Ok(russh_sftp::protocol::Attrs { id, attrs })
+            }
+        }
+
+        fn ok_status(id: u32) -> russh_sftp::protocol::Status {
+            russh_sftp::protocol::Status {
+                id,
+                status_code: russh_sftp::protocol::StatusCode::Ok,
+                error_message: "Ok".into(),
+                language_tag: "en-US".into(),
+            }
+        }
+    }
+
+    /// Start the test server; returns its counters, files and port.
+    async fn start_test_server() -> (Arc<test_server::Counters>, test_server::Files, u16) {
+        use russh::server::Server as _;
+        let counters = Arc::new(test_server::Counters::default());
+        let files: test_server::Files = Default::default();
+        let generated = generate_ssh_key_inner("ed25519", None, None).unwrap();
+        let key = russh::keys::decode_secret_key(&generated.private_key, None).unwrap();
+        let fingerprint = key.public_key().fingerprint(ssh_key::HashAlg::Sha256).to_string();
+        let config = Arc::new(russh::server::Config { keys: vec![key], ..Default::default() });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let mut server = test_server::TestServer(Arc::clone(&counters), Arc::clone(&files), Default::default());
+        tokio::spawn(async move {
+            let _ = server.run_on_socket(config, &listener).await;
+        });
+        // As if the user had clicked "Continue" for this host key.
+        SESSION_TRUSTED_KEYS.lock().unwrap().insert(host_key_id("127.0.0.1", port), fingerprint);
+        (counters, files, port)
+    }
+
+    fn test_profile(id: &str, port: u16) -> HostProfile {
+        let mut profile = HostProfile::empty();
+        profile.id = id.into();
+        profile.host = "127.0.0.1".into();
+        profile.port = port;
+        profile.username = "root".into();
+        profile.auth = AuthMethod::Password { password: "first".into() };
+        profile
+    }
+
+    #[test]
+    fn upload_refuses_to_overwrite_server_side_changes() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let (counters, files, port) = start_test_server().await;
+            let profile = test_profile("conflict-test", port);
+            files.lock().unwrap().insert("/root/app.conf".into(), (b"v1".to_vec(), 100));
+            let local = std::env::temp_dir().join(format!("vps-studio-upload-test-{}.conf", std::process::id()));
+            std::fs::write(&local, "edited locally").unwrap();
+            let local_path = local.to_string_lossy().to_string();
+            let upload = |stamp: Option<RemoteStamp>, force: bool| {
+                upload_edited_file(
+                    profile.clone(),
+                    "/root/app.conf".into(),
+                    local_path.clone(),
+                    stamp.as_ref().and_then(|s| s.mtime),
+                    stamp.as_ref().and_then(|s| s.size),
+                    Some(force),
+                )
+            };
+            let content = || String::from_utf8(files.lock().unwrap()["/root/app.conf"].0.clone()).unwrap();
+
+            // Downloaded at mtime 100 / 2 bytes: nothing changed, upload goes through.
+            let sftp = connect_sftp(&profile).await.unwrap();
+            let opened = remote_stamp(&sftp, "/root/app.conf").await.unwrap();
+            drop(sftp);
+            assert_eq!((opened.mtime, opened.size), (Some(100), Some(2)));
+            let after_upload = upload(Some(opened.clone()), false).await.unwrap();
+            assert_eq!(content(), "edited locally");
+            assert_eq!(after_upload.size, Some(14));
+
+            // Someone edits the file on the server.
+            files.lock().unwrap().insert("/root/app.conf".into(), (b"server edit".to_vec(), 500));
+            let refused = upload(Some(after_upload.clone()), false).await.unwrap_err();
+            assert!(refused.contains("REMOTE_CHANGED"), "{refused}");
+            assert_eq!(content(), "server edit", "the server's change is untouched");
+
+            // The user chose "Overwrite".
+            upload(Some(after_upload), true).await.unwrap();
+            assert_eq!(content(), "edited locally");
+
+            // Deleted on the server meanwhile: also a conflict.
+            files.lock().unwrap().remove("/root/app.conf");
+            let refused = upload(Some(opened), false).await.unwrap_err();
+            assert!(refused.contains("REMOTE_CHANGED"), "{refused}");
+
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            let (connections, logins, opened_channels, closed_channels) = counters.get();
+            assert_eq!((connections, logins), (1, 1), "SFTP uses the shared connection");
+            assert_eq!(closed_channels, opened_channels, "every SFTP channel is closed again");
+            close_shared_sessions(&profile.id).await;
+            let _ = std::fs::remove_file(&local);
+        });
     }
 
     #[test]
     fn background_work_shares_one_connection() {
-        use russh::server::Server as _;
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            let counters = Arc::new(test_server::Counters::default());
-            let generated = generate_ssh_key_inner("ed25519", None, None).unwrap();
-            let key = russh::keys::decode_secret_key(&generated.private_key, None).unwrap();
-            let fingerprint = key.public_key().fingerprint(ssh_key::HashAlg::Sha256).to_string();
-            let config = Arc::new(russh::server::Config { keys: vec![key], ..Default::default() });
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let port = listener.local_addr().unwrap().port();
-            let mut server = test_server::TestServer(Arc::clone(&counters));
-            tokio::spawn(async move {
-                let _ = server.run_on_socket(config, &listener).await;
-            });
-            // As if the user had clicked "Continue" for this host key.
-            SESSION_TRUSTED_KEYS.lock().unwrap().insert(host_key_id("127.0.0.1", port), fingerprint);
-
-            let mut profile = HostProfile::empty();
-            profile.id = "pool-test".into();
-            profile.host = "127.0.0.1".into();
-            profile.port = port;
-            profile.username = "root".into();
-            profile.auth = AuthMethod::Password { password: "first".into() };
+            let (counters, _, port) = start_test_server().await;
+            let mut profile = test_profile("pool-test", port);
             let settle = || tokio::time::sleep(Duration::from_millis(150));
 
             // 1. Commands and a monitor refresh share one connection and one login.
@@ -1957,6 +2211,31 @@ PROC|10240|1,5|bash
                 "{kind}: decoded key must match the generated public key"
             );
         }
+    }
+
+    #[test]
+    fn startup_cleanup_removes_old_downloads_and_leftover_keys() {
+        let root = std::env::temp_dir().join(format!("vps-studio-cleanup-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for dir in ["keychain", "VPS_1", "VPS_2"] {
+            std::fs::create_dir_all(root.join(dir)).unwrap();
+        }
+        std::fs::write(root.join("keychain").join("123-key.key"), "PRIVATE KEY").unwrap();
+        std::fs::write(root.join("VPS_1").join("old.conf"), "old").unwrap();
+        std::fs::write(root.join("VPS_1").join("recent.conf"), "recent").unwrap();
+        std::fs::write(root.join("VPS_2").join("old.sh"), "old").unwrap();
+        let two_days_ago = SystemTime::now() - Duration::from_secs(48 * 3600);
+        for old in [root.join("VPS_1").join("old.conf"), root.join("VPS_2").join("old.sh")] {
+            std::fs::File::options().write(true).open(&old).unwrap().set_modified(two_days_ago).unwrap();
+        }
+
+        cleanup_temp_dir(&root, Duration::from_secs(24 * 3600));
+
+        assert!(!root.join("keychain").exists(), "leftover private keys are removed");
+        assert!(!root.join("VPS_1").join("old.conf").exists());
+        assert!(root.join("VPS_1").join("recent.conf").exists(), "recent downloads are kept");
+        assert!(!root.join("VPS_2").exists(), "empty folders are removed");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

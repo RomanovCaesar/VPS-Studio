@@ -193,4 +193,17 @@ pub struct WatchedFile {
     /// Opened in a text editor because its type would run as a program.
     #[serde(default)]
     pub opened_as_text: bool,
+    /// The remote file's modification time and size when it was downloaded
+    /// (or last uploaded), to detect changes made on the server meanwhile.
+    #[serde(default)]
+    pub remote_mtime: Option<u32>,
+    #[serde(default)]
+    pub remote_size: Option<u64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteStamp {
+    pub mtime: Option<u32>,
+    pub size: Option<u64>,
 }

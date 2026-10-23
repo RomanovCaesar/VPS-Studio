@@ -18,6 +18,10 @@ const i18n = {
     "z-a": "Z-a"
   },
   "zh": {
+    "The file changed on the server": "服务器上的文件已被修改",
+    "{0} was changed on the server after you opened it. Uploading will overwrite those changes.": "{0} 在你打开之后被服务器上的其他人或程序修改过。上传会覆盖这些修改。",
+    "Overwrite": "覆盖",
+    "Commands that start with a space, or that contain a password or token, are not saved.": "以空格开头的命令，以及包含密码或令牌的命令，不会被记录。",
     "Secure storage is unavailable, so passwords and keys are saved unencrypted: {0}": "安全存储不可用，密码和密钥将以未加密方式保存：{0}",
     "Secure storage is unavailable, so passwords and keys are saved unencrypted.": "安全存储不可用，密码和密钥将以未加密方式保存。",
     "{0} can run as a program, so it was opened as text.": "{0} 是可执行的文件类型，为了安全已用文本编辑器打开。",
@@ -352,6 +356,10 @@ const i18n = {
     "{0} Hosts": "{0} 台主机"
   },
   "zh-TW": {
+    "The file changed on the server": "伺服器上的檔案已被修改",
+    "{0} was changed on the server after you opened it. Uploading will overwrite those changes.": "{0} 在你開啟之後被伺服器上的其他人或程式修改過。上傳會覆蓋這些修改。",
+    "Overwrite": "覆寫",
+    "Commands that start with a space, or that contain a password or token, are not saved.": "以空格開頭的指令，以及包含密碼或權杖的指令，不會被記錄。",
     "Secure storage is unavailable, so passwords and keys are saved unencrypted: {0}": "安全儲存區無法使用，密碼和金鑰將以未加密方式儲存：{0}",
     "Secure storage is unavailable, so passwords and keys are saved unencrypted.": "安全儲存區無法使用，密碼和金鑰將以未加密方式儲存。",
     "{0} can run as a program, so it was opened as text.": "{0} 是可執行的檔案類型，為了安全已用文字編輯器開啟。",
@@ -686,6 +694,10 @@ const i18n = {
     "{0} Hosts": "{0} 台主機"
   },
   "ja": {
+    "The file changed on the server": "サーバー上のファイルが変更されています",
+    "{0} was changed on the server after you opened it. Uploading will overwrite those changes.": "{0} は開いた後にサーバー上で変更されています。アップロードするとその変更は上書きされます。",
+    "Overwrite": "上書き",
+    "Commands that start with a space, or that contain a password or token, are not saved.": "スペースで始まるコマンドや、パスワード・トークンを含むコマンドは保存されません。",
     "Secure storage is unavailable, so passwords and keys are saved unencrypted: {0}": "安全なストレージを使用できないため、パスワードと鍵は暗号化されずに保存されます：{0}",
     "Secure storage is unavailable, so passwords and keys are saved unencrypted.": "安全なストレージを使用できないため、パスワードと鍵は暗号化されずに保存されます。",
     "{0} can run as a program, so it was opened as text.": "{0} はプログラムとして実行される種類のファイルのため、安全のためテキストとして開きました。",
@@ -1020,6 +1032,10 @@ const i18n = {
     "{0} Hosts": "{0} 台のホスト"
   },
   "ru": {
+    "The file changed on the server": "Файл на сервере изменился",
+    "{0} was changed on the server after you opened it. Uploading will overwrite those changes.": "Файл {0} изменился на сервере после того, как вы его открыли. Загрузка перезапишет эти изменения.",
+    "Overwrite": "Перезаписать",
+    "Commands that start with a space, or that contain a password or token, are not saved.": "Команды, начинающиеся с пробела или содержащие пароль или токен, не сохраняются.",
     "Secure storage is unavailable, so passwords and keys are saved unencrypted: {0}": "Защищённое хранилище недоступно, поэтому пароли и ключи сохраняются без шифрования: {0}",
     "Secure storage is unavailable, so passwords and keys are saved unencrypted.": "Защищённое хранилище недоступно, поэтому пароли и ключи сохраняются без шифрования.",
     "{0} can run as a program, so it was opened as text.": "{0} может запуститься как программа, поэтому открыт как текст.",
@@ -1354,6 +1370,10 @@ const i18n = {
     "{0} Hosts": "Хосты: {0}"
   },
   "es": {
+    "The file changed on the server": "El archivo cambió en el servidor",
+    "{0} was changed on the server after you opened it. Uploading will overwrite those changes.": "{0} se modificó en el servidor después de que lo abrieras. Subirlo sobrescribirá esos cambios.",
+    "Overwrite": "Sobrescribir",
+    "Commands that start with a space, or that contain a password or token, are not saved.": "No se guardan los comandos que empiezan con un espacio ni los que contienen una contraseña o un token.",
     "Secure storage is unavailable, so passwords and keys are saved unencrypted: {0}": "El almacenamiento seguro no está disponible, así que las contraseñas y claves se guardan sin cifrar: {0}",
     "Secure storage is unavailable, so passwords and keys are saved unencrypted.": "El almacenamiento seguro no está disponible, así que las contraseñas y claves se guardan sin cifrar.",
     "{0} can run as a program, so it was opened as text.": "{0} puede ejecutarse como un programa, así que se abrió como texto.",

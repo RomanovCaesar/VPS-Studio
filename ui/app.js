@@ -1688,7 +1688,11 @@ function loadShellHistory() {
     const raw = window.localStorage?.getItem(SHELL_HISTORY_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    // Older versions also saved commands that contain passwords or tokens.
+    const kept = parsed.filter((entry) => !containsSecret(entry?.command || ""));
+    if (kept.length !== parsed.length) window.localStorage?.setItem(SHELL_HISTORY_KEY, JSON.stringify(kept));
+    return kept;
   } catch {
     return [];
   }
@@ -1702,8 +1706,29 @@ function persistShellHistory() {
   }
 }
 
+// Not remembered: commands typed with a leading space (like bash's
+// HISTCONTROL=ignorespace) and commands that carry a password or token.
+const SECRET_COMMAND_PATTERNS = [
+  /\b(mysql|mariadb|mysqldump|mysqladmin)\b[^|;&]*\s-p\S/i, // mysql -pPASSWORD
+  /(^|\s)--?(password|passwd|pass|token|secret|api[-_]?key)(=|\s+)\S/i, // --password=x, --token x
+  /\b[A-Za-z_]*(password|passwd|secret|token|api_?key)[A-Za-z_]*=\S/i, // PASSWORD=x, GITHUB_TOKEN=x, ?token=x
+  /\bsshpass\b/i,
+  /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:[^\s/@]+@/i, // scheme://user:password@host
+  /\becho\s+\S+\s*\|\s*sudo\s+-S\b/i, // echo pw | sudo -S
+];
+
+function containsSecret(command) {
+  return SECRET_COMMAND_PATTERNS.some((pattern) => pattern.test(command));
+}
+
+function shouldRememberCommand(rawCommand) {
+  const command = String(rawCommand || "");
+  if (!command.trim() || /^\s/.test(command)) return false;
+  return !containsSecret(command);
+}
+
 function recordShellHistory(command) {
-  if (!command || !command.trim()) return;
+  if (!shouldRememberCommand(command)) return;
   const entry = {
     command: command.trim(),
     time: Date.now(),
@@ -2682,12 +2707,13 @@ function clamp(value, min, max) {
 }
 
 async function runTerminalCommand() {
-  const command = state.commandInput.trim();
+  const rawCommand = state.commandInput;
+  const command = rawCommand.trim();
   if (!command || !state.activeShellId) return;
   state.commandInput = "";
   const host = state.activeHost || { name: "Local Terminal", username: "local" };
   pushLog("Command", command, host);
-  recordShellHistory(command);
+  recordShellHistory(rawCommand);
   render({ terminalBottom: true, focusTerminal: true });
   await sendShellInput(`${command}\r`);
 }
@@ -2800,21 +2826,38 @@ async function openRemote(entry, { openWith = false } = {}) {
   }
 }
 
-async function uploadWatched(file) {
+async function uploadWatched(file, force = false) {
   try {
-    await call("upload_edited_file", {
+    const stamp = await call("upload_edited_file", {
       profile: state.activeHost,
       remotePath: file.remotePath,
-      remote_path: file.remotePath,
       localPath: file.localPath,
-      local_path: file.localPath,
+      expectedMtime: file.remoteMtime ?? null,
+      expectedSize: file.remoteSize ?? null,
+      force,
     });
+    // Compare the next upload against what is on the server now.
+    file.remoteMtime = stamp?.mtime ?? null;
+    file.remoteSize = stamp?.size ?? null;
     file.dirty = false;
     file.originalModifiedMs = file.lastSeenModifiedMs;
     pushLog("SFTP", `Uploaded ${file.remotePath}.`, state.activeHost);
     setStatus(t("Uploaded {0}", file.remotePath));
     await refreshSftp();
   } catch (error) {
+    if (String(error).includes("REMOTE_CHANGED")) {
+      openSftpDialog({
+        kind: "confirm",
+        title: t("The file changed on the server"),
+        message: t("{0} was changed on the server after you opened it. Uploading will overwrite those changes.", file.remotePath),
+        confirmLabel: t("Overwrite"),
+        danger: true,
+        onConfirm: async () => {
+          await uploadWatched(file, true);
+        },
+      });
+      return;
+    }
     setStatus(t("Upload failed: {0}", error));
   }
 }
@@ -3108,7 +3151,8 @@ function openSftpDialog(dialog) {
   sftpDialogEl.addEventListener("keydown", (event) => {
     event.stopPropagation();
     if (event.key === "Escape") closeSftpDialog();
-    if (event.key === "Enter" && sftpDialog?.kind !== "error") {
+    // Enter never confirms a destructive "confirm" dialog by accident.
+    if (event.key === "Enter" && sftpDialog?.kind !== "error" && sftpDialog?.kind !== "confirm") {
       event.preventDefault();
       confirmSftpDialog();
     }
@@ -3149,7 +3193,7 @@ function drawSftpDialog() {
   const dialog = sftpDialog;
   if (!dialog || !sftpDialogEl) return;
   let body = "";
-  if (dialog.kind === "error") {
+  if (dialog.kind === "error" || dialog.kind === "confirm") {
     body = `<p class="app-dialog-message">${escapeHtml(dialog.message)}</p>`;
   } else if (dialog.kind === "input") {
     body = `
@@ -3176,7 +3220,8 @@ function drawSftpDialog() {
     dialog.kind === "error"
       ? ""
       : `<footer class="delete-dialog-footer">
-          <button class="btn primary app-dialog-confirm" data-dialog-confirm ${sftpDialogCanConfirm() ? "" : "disabled"}>${escapeHtml(dialog.confirmLabel || t("Confirm"))}</button>
+          ${dialog.kind === "confirm" ? `<button class="btn ghost" data-dialog-close>${t("Cancel")}</button>` : ""}
+          <button class="btn ${dialog.danger ? "delete-dialog-remove" : "primary"} app-dialog-confirm" data-dialog-confirm ${sftpDialogCanConfirm() ? "" : "disabled"}>${escapeHtml(dialog.confirmLabel || t("Confirm"))}</button>
         </footer>`;
   sftpDialogEl.innerHTML = `
     <section class="delete-dialog app-dialog-box" role="dialog" aria-modal="true">
@@ -3233,7 +3278,7 @@ async function confirmSftpDialog() {
   if (!dialog?.onConfirm || !sftpDialogCanConfirm()) return;
   dialog.busy = true;
   refreshSftpDialogChrome();
-  const value = dialog.kind === "permissions" ? dialog.mode : dialog.value.trim();
+  const value = dialog.kind === "permissions" ? dialog.mode : dialog.kind === "confirm" ? null : dialog.value.trim();
   const error = await dialog.onConfirm(value);
   if (sftpDialog !== dialog) return;
   dialog.busy = false;
@@ -3757,14 +3802,14 @@ function renderTopbar() {
   return `
     <header class="topbar">
       <div class="lang-menu">
-        <button class="icon-btn quiet" onclick="event.stopPropagation(); state.languageMenuOpen = !state.languageMenuOpen; render();" title="${t('Language')}">
+        <button class="icon-btn quiet" data-action="toggle-language-menu" title="${t('Language')}">
           <svg viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
         </button>
         ${state.languageMenuOpen ? `
-          <div onclick="event.stopPropagation(); state.languageMenuOpen = false; render();" style="position:fixed; inset:0; z-index:999;"></div>
+          <div data-action="close-all-menus" style="position:fixed; inset:0; z-index:999;"></div>
           <div class="lang-dropdown">
             <div class="lang-option-title">${t('Language')}</div>
-            ${LANGUAGES.map((lang) => `<button class="lang-option ${state.language === lang.code ? "active" : ""}" onclick="toggleLanguage('${lang.code}')">${lang.name}</button>`).join("")}
+            ${LANGUAGES.map((lang) => `<button class="lang-option ${state.language === lang.code ? "active" : ""}" data-action="set-language" data-lang="${lang.code}">${lang.name}</button>`).join("")}
           </div>
         ` : ''}
       </div>
@@ -5157,10 +5202,9 @@ async function sendCommandText(text, { appendCr }) {
   const host = state.activeHost || { name: "Local Terminal", username: "local" };
   data
     .split("\r")
-    .map((line) => line.trim())
-    .filter(Boolean)
+    .filter((line) => line.trim())
     .forEach((line) => {
-      pushLog("Command", line, host);
+      pushLog("Command", line.trim(), host);
       recordShellHistory(line);
     });
   await sendShellInput(data);
@@ -5351,6 +5395,7 @@ function renderShellHistoryPanel() {
         <button class="icon-btn quiet" title="${t('Close')}" data-action="close-editor">${closeIcon()}</button>
       </div>
       <div class="details-scroll shell-history-scroll">
+        <p class="shell-history-note">${t("Commands that start with a space, or that contain a password or token, are not saved.")}</p>
         ${history.length
           ? history.map((entry, index) => renderShellHistoryItem(entry, index)).join("")
           : `<div class="empty">${t("No commands recorded yet.")}</div>`
@@ -5863,6 +5908,16 @@ function bindEvents() {
       case "close-all-menus":
         closeMenus();
         render();
+        break;
+      case "toggle-language-menu": {
+        const open = !state.languageMenuOpen;
+        closeMenus();
+        state.languageMenuOpen = open;
+        render();
+        break;
+      }
+      case "set-language":
+        toggleLanguage(element.dataset.lang);
         break;
       case "cancel-delete-dialog":
         resolveDeleteConfirmation(false);

@@ -14,6 +14,8 @@ use backend::{
 use config::{load_hosts, save_hosts, vault_status, load_known_hosts, save_known_hosts, import_known_hosts, add_known_host};
 
 fn main() {
+    // Old downloads and leftover temporary keys; not needed to start the UI.
+    std::thread::spawn(backend::cleanup_temp_files);
     tauri::Builder::default()
         .manage(ShellStore::default())
         .invoke_handler(tauri::generate_handler![
